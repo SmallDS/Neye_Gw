@@ -33,8 +33,8 @@
           <div class="payment-hero-head">
             <div>
               <p class="payment-kicker">NEYE / SUBSCRIPTION</p>
-              <h1 id="payment-title">把订阅方案确认下来。</h1>
-              <p class="payment-hero-lede">先提交订单，支付方式配置完成后即可继续完成支付。</p>
+              <h1 id="payment-title">订阅方案与订单</h1>
+              <p class="payment-hero-lede">月付 9.9 元 · 年付 99.99 元</p>
             </div>
             <span class="payment-hero-note">订单流程 / 03</span>
           </div>
@@ -53,7 +53,7 @@
               <div class="panel-header">
                 <div>
                   <p class="panel-kicker">提交订单</p>
-                  <h2>确认订阅信息</h2>
+                  <h2>订阅信息</h2>
                 </div>
                 <span class="panel-state" data-order-state>订单待创建</span>
               </div>
@@ -61,7 +61,7 @@
               <div class="form-block">
                 <div class="form-block-heading">
                   <h3>选择方案</h3>
-                  <span>可随时切换</span>
+
                 </div>
                 <div class="plan-options" role="radiogroup" aria-label="选择订阅方案">
                   <button class="plan-option is-selected" type="button" data-plan="monthly" aria-pressed="true">
@@ -75,36 +75,36 @@
                     <span class="plan-option-price">99.99<small>元 / 年</small></span>
                   </button>
                 </div>
-                <p class="field-hint">提交后会生成一笔待支付订单，当前不会发起真实扣款。</p>
+
               </div>
 
               <div class="form-block">
                 <div class="form-block-heading">
                   <h3>联系信息</h3>
-                  <span>用于订单确认</span>
+
                 </div>
                 <div class="form-field-grid">
                   <label class="form-field">
                     <span class="form-label">联系人 <em>*</em></span>
-                    <input id="contact-name" name="contactName" type="text" autocomplete="name" placeholder="请输入姓名" required />
+                    <input id="contact-name" name="contactName" type="text" autocomplete="name" required />
                   </label>
                   <label class="form-field">
                     <span class="form-label">联系方式 <em>*</em></span>
-                    <input id="contact-method" name="contactMethod" type="text" autocomplete="email" placeholder="手机号或邮箱" required />
+                    <input id="contact-method" name="contactMethod" type="text" autocomplete="email" required />
                   </label>
                 </div>
                 <label class="form-field">
                   <span class="form-label">备注 <small>可选</small></span>
-                  <textarea id="order-note" name="orderNote" rows="3" placeholder="可以填写门店名称或其他说明"></textarea>
+                  <textarea id="order-note" name="orderNote" rows="3"></textarea>
                 </label>
               </div>
 
               <label class="consent-field" for="order-consent">
                 <input id="order-consent" type="checkbox" required />
-                <span>我已确认订阅方案和价格，了解当前支付方式尚未配置。</span>
+                <span>确认订阅方案及价格。</span>
               </label>
 
-              <div class="secure-note"><span class="note-mark" aria-hidden="true">N</span><span>订单信息仅保存在当前浏览器，用于演示完整提交流程。</span></div>
+
               <div class="panel-actions">
                 <button class="button button-primary" type="submit">提交订单 <span aria-hidden="true">→</span></button>
                 <a class="text-link" href="./index.html#subscription">返回方案 <span aria-hidden="true">↩</span></a>
@@ -120,7 +120,7 @@
                   <h2 id="order-result-title">订单创建成功。</h2>
                 </div>
               </div>
-              <p class="order-result-copy">订单已保存。点击“立即支付”时会检查支付方式配置，当前不会产生扣款。</p>
+              <p class="order-result-copy">订单状态：待支付。</p>
               <div class="order-meta">
                 <div><span>订单号</span><strong data-order-id>—</strong></div>
                 <div><span>订阅方案</span><strong data-order-plan>—</strong></div>
@@ -145,14 +145,14 @@
               <div class="summary-line"><span>支付方式</span><strong data-summary-payment>待配置</strong></div>
             </div>
             <div class="summary-total"><span>应付金额</span><strong data-summary-price>¥ 9.9</strong></div>
-            <div class="summary-foot"><span class="summary-foot-mark">i</span><p>支付方式配置完成后，订单可继续完成支付。</p></div>
+
           </aside>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <div class="container footer-inner"><div class="footer-brand"><span class="brand-mark brand-mark-small" aria-hidden="true"><svg viewBox="0 0 36 36" role="presentation"><path d="M9 27V9l18 18V9" /><path class="brand-mark-cut" d="M9 9l18 18" /></svg></span><span><strong>NEye</strong><small>客户与验配工作台</small></span></div><p>订阅订单 · 支付方式预留</p><span class="footer-year">© 2026 NEye</span></div>
+      <div class="container footer-inner"><div class="footer-brand"><span class="brand-mark brand-mark-small" aria-hidden="true"><svg viewBox="0 0 36 36" role="presentation"><path d="M9 27V9l18 18V9" /><path class="brand-mark-cut" d="M9 9l18 18" /></svg></span><span><strong>NEye</strong><small>客户与验配工作台</small></span></div><p>NEye 订阅服务</p><span class="footer-year">© 2026 NEye</span></div>
     </footer>
   </body>
 </html>

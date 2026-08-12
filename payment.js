@@ -76,7 +76,7 @@
       orders.unshift(order);
       window.localStorage.setItem(storageKey, JSON.stringify(orders.slice(0, 10)));
     } catch {
-      // 本地存储不可用时，当前页面仍可继续完成演示流程。
+      // 本地存储不可用时，保留当前页状态。
     }
   };
 
@@ -128,7 +128,7 @@
     setFeedback(formFeedback, '');
     setFeedback(paymentFeedback, '');
     if (!orderForm.reportValidity()) {
-      setFeedback(formFeedback, '请补全联系人、联系方式，并确认订阅信息。', 'is-error');
+      setFeedback(formFeedback, '订单信息不完整。', 'is-error');
       return;
     }
 
@@ -151,7 +151,7 @@
     if (!latestOrder) return;
     if (summaryState) summaryState.textContent = '待支付';
     if (summaryPayment) summaryPayment.textContent = '未配置';
-    setFeedback(paymentFeedback, '未配置支付方式，订单已提交但不会扣款。请先配置微信支付、支付宝或其他收款渠道。', 'is-error');
+    setFeedback(paymentFeedback, '未配置支付方式。', 'is-error');
     paymentFeedback?.focus();
   });
 
