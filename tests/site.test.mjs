@@ -21,6 +21,10 @@ import {
 } from '../esa/lib/alipay.js';
 import { routeRequest } from '../esa/lib/api.js';
 import { readOrder, readSubscriber } from '../esa/lib/domain.js';
+import {
+  PAYMENT_CONFIG_STORAGE_KEY,
+  resolvePaymentConfig,
+} from '../esa/lib/payment-config.js';
 import { updatePlanConfig } from '../esa/lib/plans.js';
 import {
   emitSubscriptionEvent,
@@ -113,6 +117,10 @@ function rsaPair() {
   });
 }
 
+function pemBody(value) {
+  return String(value).replace(/-----BEGIN [^-]+-----|-----END [^-]+-----|\s+/g, '');
+}
+
 const applicationKeys = rsaPair();
 const alipayKeys = rsaPair();
 
@@ -166,7 +174,7 @@ function cookiesFrom(response) {
   };
 }
 
-async function setupAdmin(store, config, ip) {
+async function setupAdmin(store, config, ip, codeOffsetMs = 0) {
   const commonHeaders = { 'x-forwarded-for': ip || '198.51.100.10' };
   const started = await routeRequest(request('/api/admin/auth/setup/start', {
     method: 'POST',
@@ -175,7 +183,7 @@ async function setupAdmin(store, config, ip) {
   }), { store: store, config: config, requestId: 'REQ_SETUP_START' });
   assert.equal(started.status, 201);
   const startBody = await payload(started);
-  const code = totpCode(startBody.challenge.secret);
+  const code = totpCode(startBody.challenge.secret, Date.now() + codeOffsetMs);
   const confirmed = await routeRequest(request('/api/admin/auth/setup/confirm', {
     method: 'POST',
     headers: commonHeaders,
@@ -326,6 +334,120 @@ test('TOTP 首次绑定、重放保护、CSRF、重置和旧会话失效', async
     function (error) { return error.code === 'ADMIN_AUTH_REQUIRED'; }
   );
 });
+
+test('支付配置经 TOTP 加密保存，密钥不回显且环境变量仍可作为兜底', async function () {
+  const fallback = await resolvePaymentConfig(new MemoryStore(), testConfig());
+  assert.equal(fallback.paymentConfigSource, 'environment');
+  assert.equal(fallback.appId, '2026000000000000');
+  const store = new MemoryStore();
+  const rootConfig = testConfig({
+    appId: '',
+    privatePkcsKey: '',
+    privateKey: '',
+    alipayPublicKey: '',
+    sellerId: '',
+    sellerEmail: '',
+    webhookUrl: '',
+    webhookSecret: '',
+  });
+  const session = await setupAdmin(store, rootConfig, '198.51.100.25', -30000);
+  const managedApplicationKeys = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+  });
+  const privatePkcsKey = pemBody(managedApplicationKeys.privateKey);
+  const alipayPublicKey = pemBody(alipayKeys.publicKey);
+  const firstCode = totpCode(session.secret);
+  const baseInput = {
+    paymentEnvironment: 'sandbox',
+    appId: '9021000000000001',
+    sellerId: '2088000000000001',
+    sellerEmail: '',
+    baseUrl: 'https://www.smallds.icu',
+    webhookEnabled: false,
+    alipayPublicKey,
+    totpCode: firstCode,
+  };
+
+  await assert.rejects(
+    routeRequest(adminRequest('/api/admin/payment-config', session, {
+      method: 'PUT',
+      json: Object.assign({}, baseInput, { privatePkcsKey: 'not-a-key' }),
+    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_INVALID' }),
+    function (error) { return error.code === 'PAYMENT_KEY_FORMAT_INVALID'; }
+  );
+
+  const saved = await routeRequest(adminRequest('/api/admin/payment-config', session, {
+    method: 'PUT',
+    json: Object.assign({}, baseInput, { privatePkcsKey }),
+  }), { store, config: rootConfig, requestId: 'REQ_CONFIG_SAVE' });
+  assert.equal(saved.status, 200);
+  const savedBody = await payload(saved);
+  assert.equal(savedBody.paymentConfig.source, 'admin');
+  assert.equal(savedBody.paymentConfig.version, 1);
+  assert.equal(savedBody.paymentConfig.secrets.applicationPrivateKey.configured, true);
+  assert.equal(savedBody.paymentConfig.secrets.alipayPublicKey.configured, true);
+  assert.equal(JSON.stringify(savedBody).includes(privatePkcsKey), false);
+  assert.equal(JSON.stringify(savedBody).includes(alipayPublicKey), false);
+
+  const record = await store.getJson(PAYMENT_CONFIG_STORAGE_KEY);
+  assert.match(record.configCipher, /^v1\./);
+  assert.equal(Object.hasOwn(record, 'appId'), false);
+  assert.equal(store.rawText().includes(privatePkcsKey), false);
+  assert.equal(store.rawText().includes(alipayPublicKey), false);
+
+  const effective = await resolvePaymentConfig(store, rootConfig);
+  assert.equal(effective.appId, baseInput.appId);
+  assert.equal(effective.paymentConfigSource, 'admin');
+  assert.equal(effective.gateway, 'https://openapi-sandbox.dl.alipaydev.com/gateway.do');
+
+  const created = await createPublicOrder(store, rootConfig, 'monthly', 'secure@example.com', '安全配置测试');
+  assert.equal(created.payment.action, effective.gateway);
+  assert.equal(rsaVerify(
+    buildSignContent(created.payment.fields),
+    created.payment.fields.sign,
+    managedApplicationKeys.publicKey
+  ), true);
+
+  const settingsResponse = await routeRequest(adminRequest('/api/admin/payment-config', session), {
+    store,
+    config: rootConfig,
+    requestId: 'REQ_CONFIG_GET',
+  });
+  const settingsText = await settingsResponse.text();
+  assert.equal(settingsText.includes(privatePkcsKey), false);
+  assert.equal(settingsText.includes(alipayPublicKey), false);
+
+  await assert.rejects(
+    routeRequest(adminRequest('/api/admin/payment-config', session, {
+      method: 'PUT',
+      json: Object.assign({}, baseInput, { privatePkcsKey }),
+    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_REPLAY' }),
+    function (error) { return error.code === 'TOTP_INVALID'; }
+  );
+
+  const retained = await routeRequest(adminRequest('/api/admin/payment-config', session, {
+    method: 'PUT',
+    json: {
+      paymentEnvironment: 'sandbox',
+      appId: baseInput.appId,
+      sellerId: baseInput.sellerId,
+      sellerEmail: 'merchant@example.com',
+      baseUrl: baseInput.baseUrl,
+      webhookEnabled: false,
+      totpCode: totpCode(session.secret, Date.now() + 30000),
+    },
+  }), { store, config: rootConfig, requestId: 'REQ_CONFIG_RETAIN' });
+  const retainedBody = await payload(retained);
+  assert.equal(retainedBody.paymentConfig.version, 2);
+  assert.equal(
+    retainedBody.paymentConfig.secrets.applicationPrivateKey.fingerprint,
+    savedBody.paymentConfig.secrets.applicationPrivateKey.fingerprint
+  );
+  assert.equal(store.rawText().includes(privatePkcsKey), false);
+});
+
 const responseKeys = {
   'alipay.trade.query': 'alipay_trade_query_response',
   'alipay.trade.refund': 'alipay_trade_refund_response',

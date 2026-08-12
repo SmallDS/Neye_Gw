@@ -24,6 +24,7 @@ import {
   requireAdminSession,
   startReset,
   startSetup,
+  verifySensitiveTotp,
 } from './auth.js';
 import {
   buildPaymentFields,
@@ -69,6 +70,11 @@ import {
   listWebhooks,
   retryWebhook,
 } from './webhook.js';
+import {
+  getPaymentConfigState,
+  resolvePaymentConfig,
+  savePaymentConfig,
+} from './payment-config.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -389,22 +395,22 @@ function ordersCsv(orders) {
   return '\uFEFF' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
 }
 
-async function handleAdminRoute(request, store, config, requestId) {
+async function handleAdminRoute(request, store, rootConfig, requestId) {
   const url = new URL(request.url);
   const path = url.pathname;
 
   if (path === '/api/admin/auth/state') {
     assertMethod(request, 'GET');
-    return jsonSuccess(request, config, requestId, { auth: await getAuthState(store, config) });
+    return jsonSuccess(request, rootConfig, requestId, { auth: await getAuthState(store, rootConfig) });
   }
   if (path === '/api/admin/auth/setup/start') {
     assertMethod(request, 'POST');
-    const result = await startSetup(store, config, request, await parseJsonBody(request));
-    return jsonSuccess(request, config, requestId, { challenge: result }, 201);
+    const result = await startSetup(store, rootConfig, request, await parseJsonBody(request));
+    return jsonSuccess(request, rootConfig, requestId, { challenge: result }, 201);
   }
   if (path === '/api/admin/auth/setup/confirm') {
     assertMethod(request, 'POST');
-    const session = await confirmSetup(store, config, request, await parseJsonBody(request));
+    const session = await confirmSetup(store, rootConfig, request, await parseJsonBody(request));
     await recordAudit(store, {
       action: 'admin.totp.setup',
       targetType: 'admin',
@@ -412,18 +418,18 @@ async function handleAdminRoute(request, store, config, requestId) {
       result: 'succeeded',
       requestId,
     });
-    return jsonSuccess(request, config, requestId, {
+    return jsonSuccess(request, rootConfig, requestId, {
       session: { expiresAt: session.session.expiresAt * 1000, csrfToken: session.csrfToken },
     }, 200, { 'Set-Cookie': session.cookies });
   }
   if (path === '/api/admin/auth/reset/start') {
     assertMethod(request, 'POST');
-    const result = await startReset(store, config, request, await parseJsonBody(request));
-    return jsonSuccess(request, config, requestId, { challenge: result }, 201);
+    const result = await startReset(store, rootConfig, request, await parseJsonBody(request));
+    return jsonSuccess(request, rootConfig, requestId, { challenge: result }, 201);
   }
   if (path === '/api/admin/auth/reset/confirm') {
     assertMethod(request, 'POST');
-    const session = await confirmReset(store, config, request, await parseJsonBody(request));
+    const session = await confirmReset(store, rootConfig, request, await parseJsonBody(request));
     await recordAudit(store, {
       action: 'admin.totp.reset',
       targetType: 'admin',
@@ -431,13 +437,13 @@ async function handleAdminRoute(request, store, config, requestId) {
       result: 'succeeded',
       requestId,
     });
-    return jsonSuccess(request, config, requestId, {
+    return jsonSuccess(request, rootConfig, requestId, {
       session: { expiresAt: session.session.expiresAt * 1000, csrfToken: session.csrfToken },
     }, 200, { 'Set-Cookie': session.cookies });
   }
   if (path === '/api/admin/auth/login') {
     assertMethod(request, 'POST');
-    const session = await login(store, config, request, await parseJsonBody(request));
+    const session = await login(store, rootConfig, request, await parseJsonBody(request));
     await recordAudit(store, {
       action: 'admin.login',
       targetType: 'admin',
@@ -445,18 +451,18 @@ async function handleAdminRoute(request, store, config, requestId) {
       result: 'succeeded',
       requestId,
     });
-    return jsonSuccess(request, config, requestId, {
+    return jsonSuccess(request, rootConfig, requestId, {
       session: { expiresAt: session.session.expiresAt * 1000, csrfToken: session.csrfToken },
     }, 200, { 'Set-Cookie': session.cookies });
   }
   if (path === '/api/admin/session') {
     assertMethod(request, 'GET');
-    const session = await requireAdminSession(store, config, request);
-    return jsonSuccess(request, config, requestId, { session });
+    const session = await requireAdminSession(store, rootConfig, request);
+    return jsonSuccess(request, rootConfig, requestId, { session });
   }
   if (path === '/api/admin/auth/logout') {
     assertMethod(request, 'POST');
-    await requireAdminSession(store, config, request, { csrf: true });
+    await requireAdminSession(store, rootConfig, request, { csrf: true });
     await recordAudit(store, {
       action: 'admin.logout',
       targetType: 'admin',
@@ -464,11 +470,62 @@ async function handleAdminRoute(request, store, config, requestId) {
       result: 'succeeded',
       requestId,
     });
-    return jsonSuccess(request, config, requestId, {}, 200, { 'Set-Cookie': clearSessionCookies() });
+    return jsonSuccess(request, rootConfig, requestId, {}, 200, { 'Set-Cookie': clearSessionCookies() });
   }
 
   const writeRequest = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method);
-  await requireAdminSession(store, config, request, { csrf: writeRequest });
+  await requireAdminSession(store, rootConfig, request, { csrf: writeRequest });
+
+  if (path === '/api/admin/payment-config' && request.method === 'GET') {
+    const result = await getPaymentConfigState(store, rootConfig);
+    return jsonSuccess(request, result.effectiveConfig, requestId, {
+      paymentConfig: result.paymentConfig,
+      health: paymentHealth(result.effectiveConfig),
+      storage: {
+        namespace: rootConfig.kvNamespace,
+        eventualConsistency: true,
+        maximumDocumentedDelaySeconds: 300,
+      },
+    });
+  }
+  if (path === '/api/admin/payment-config' && request.method === 'PUT') {
+    const input = await parseJsonBody(request, 50000);
+    const result = await auditAction(store, requestId, {
+      action: 'payment.config.update',
+      targetType: 'payment_config',
+      targetId: 'current',
+      meta: {
+        environment: String(input.paymentEnvironment || '').slice(0, 20),
+        applicationPrivateKeyReplaced: Boolean(input.privatePkcsKey),
+        alipayPublicKeyReplaced: Boolean(input.alipayPublicKey),
+        webhookSecretReplaced: Boolean(input.webhookSecret),
+      },
+      allowedMeta: [
+        'environment',
+        'applicationPrivateKeyReplaced',
+        'alipayPublicKeyReplaced',
+        'webhookSecretReplaced',
+      ],
+    }, () => savePaymentConfig(
+      store,
+      rootConfig,
+      input,
+      () => verifySensitiveTotp(store, rootConfig, request, input.totpCode)
+    ));
+    return jsonSuccess(request, result.effectiveConfig, requestId, {
+      paymentConfig: result.paymentConfig,
+      health: paymentHealth(result.effectiveConfig),
+      changedFields: result.changedFields,
+      storage: {
+        namespace: rootConfig.kvNamespace,
+        eventualConsistency: true,
+        maximumDocumentedDelaySeconds: 300,
+      },
+      dataSync: { eventual: true, message: '支付配置已保存，边缘节点同步可能需要数秒。' },
+    });
+  }
+
+  const config = await resolvePaymentConfig(store, rootConfig);
 
   if (path === '/api/admin/dashboard') {
     assertMethod(request, 'GET');
@@ -792,35 +849,39 @@ async function handleAdminRoute(request, store, config, requestId) {
 }
 
 export async function routeRequest(request, supplied = {}) {
-  const config = supplied.config || readConfig();
+  const rootConfig = supplied.config || readConfig();
   const requestId = supplied.requestId || createRequestId();
   const url = new URL(request.url);
 
   if (request.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
     return new Response(null, {
       status: 204,
-      headers: responseHeaders(request, config, requestId, 'text/plain; charset=utf-8'),
+      headers: responseHeaders(request, rootConfig, requestId, 'text/plain; charset=utf-8'),
     });
   }
 
-  const store = supplied.store || new KvStore(config);
+  const store = supplied.store || new KvStore(rootConfig);
   if (url.pathname === '/api/subscription/plans') {
-    return jsonSuccess(request, config, requestId, await handlePublicPlans(request, store));
+    return jsonSuccess(request, rootConfig, requestId, await handlePublicPlans(request, store));
   }
   if (url.pathname === '/api/payment/create') {
+    const config = await resolvePaymentConfig(store, rootConfig);
     return jsonSuccess(request, config, requestId, await handlePaymentCreate(request, store, config), 201);
   }
   if (url.pathname === '/api/payment/status') {
+    const config = await resolvePaymentConfig(store, rootConfig);
     return jsonSuccess(request, config, requestId, await handlePaymentStatus(request, store, config));
   }
   if (url.pathname === '/api/payment/return') {
+    const config = await resolvePaymentConfig(store, rootConfig);
     return handlePaymentReturn(request, store, config);
   }
   if (url.pathname === '/api/payment/notify') {
+    const config = await resolvePaymentConfig(store, rootConfig);
     return handlePaymentNotify(request, store, config, requestId);
   }
   if (url.pathname.startsWith('/api/admin/')) {
-    return handleAdminRoute(request, store, config, requestId);
+    return handleAdminRoute(request, store, rootConfig, requestId);
   }
   throw new AppError(404, 'NOT_FOUND', '接口不存在。');
 }

@@ -6,7 +6,7 @@
 
 - 原生 HTML、CSS、JavaScript，无前端构建步骤。
 - ESA Functions 处理订单、支付宝接口、TOTP 管理认证和 Webhook。
-- ESA Edge KV 保存 v2_ 数据；联系人、备注和 TOTP 密钥使用 AES-GCM 加密。
+- ESA Edge KV 保存 v2_ 数据；联系人、备注、TOTP 密钥和支付配置使用 AES-GCM 加密。
 - 支付宝 AI 网页应用付款采用 fetch + node:crypto 实现 RSA2 协议，不把完整 Node SDK 作为线上依赖。
 - 月付和年付均为一次付款购买一个自然月或一个自然年，不自动续费。
 
@@ -26,7 +26,7 @@
 - GET /api/payment/return
 - POST /api/payment/notify
 
-管理接口统一位于 /api/admin/，包括 TOTP 绑定与重置、概览、套餐、订单同步、关单、退款、退款查询、订阅调整、账单下载、CSV 导出、Webhook 重试和审计日志。
+管理接口统一位于 /api/admin/，包括 TOTP 绑定与重置、加密支付配置、概览、套餐、订单同步、关单、退款、退款查询、订阅调整、账单下载、CSV 导出、Webhook 重试和审计日志。
 
 支付结果只以验签后的支付宝异步通知或 alipay.trade.query 主动查询为准。同步返回只引导浏览器回到订单页，不直接把订单标记为已支付。
 
@@ -56,38 +56,45 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 
 ## 环境变量
 
-必须配置：
+必须留在 ESA 控制台的根变量只有 5 个：
 
 | 变量 | 用途 |
 | --- | --- |
-| AIPAY_ENV | 首次验收填 sandbox；正式环境填 production |
-| AIPAY_APP_ID | 支付宝应用 APP ID |
-| AIPAY_PRIVATE_PKCS_KEY | 非 Java 格式应用私钥；也可改用 AIPAY_PRIVATE_KEY 配置 PKCS8 私钥 |
-| AIPAY_ALIPAY_PUBLIC_KEY | 支付宝公钥，用于响应和通知验签 |
-| AIPAY_SELLER_ID | 支付宝商户 UID，用于校验订单归属 |
-| AIPAY_PUBLIC_BASE_URL | https://www.smallds.icu |
 | ESA_KV_NAMESPACE | Edge KV 命名空间，例如 neye-orders |
 | ADMIN_SETUP_TOKEN | 首次绑定 TOTP 的高强度随机令牌 |
 | ADMIN_RESET_TOKEN | 丢失验证器时重新绑定的独立高强度随机令牌 |
 | ADMIN_DATA_KEY | AES-GCM 与联系人 HMAC 的高强度随机密钥 |
 | ADMIN_SESSION_SECRET | 8 小时管理会话的高强度随机签名密钥 |
 
-可选配置：
+这 5 个变量负责解密、身份验证与会话签名，不能放进网页设置。`ADMIN_DATA_KEY` 部署后不要直接更换，否则已有加密数据将无法读取，订阅用户标识也会变化。
 
-| 变量 | 默认或用途 |
+支付宝收款参数在 `/admin/` 的“支付配置”中维护：
+
+- 支付环境、APP ID、商户 UID 或商户邮箱。
+- 官网地址；同步返回和异步通知地址由系统按官网地址生成。
+- Node.js 使用的 PKCS#1 应用私钥、支付宝公钥。
+- 可选的订阅 Webhook 地址和 HMAC 签名密钥。
+
+页面只返回配置状态和密钥指纹。密钥输入框始终为空，留空保存表示保留当前密钥；每次保存都需要一个未使用过的 6 位 TOTP。登录时刚使用的验证码不能重复用于改配置，必要时等待下一组验证码。
+
+为兼容旧部署，以下 ESA 变量仍可作为首次迁移兜底；后台成功保存后以 Edge KV 中的加密配置为准，这些支付变量即可从 ESA 移除：
+
+| 变量 | 兼容用途 |
 | --- | --- |
-| AIPAY_GATEWAY | 根据 AIPAY_ENV 自动选择沙箱或正式网关 |
-| AIPAY_RETURN_URL | 默认 https://www.smallds.icu/api/payment/return |
-| AIPAY_NOTIFY_URL | 默认 https://www.smallds.icu/api/payment/notify |
-| AIPAY_SELLER_EMAIL | 未使用商户 UID 时的备用商户身份 |
-| SUBSCRIPTION_WEBHOOK_URL | 订阅权益事件接收地址；不配置则完全禁用 |
-| SUBSCRIPTION_WEBHOOK_SECRET | Webhook HMAC-SHA256 密钥 |
+| AIPAY_ENV | sandbox 或 production |
+| AIPAY_APP_ID | 支付宝应用 APP ID |
+| AIPAY_PRIVATE_PKCS_KEY | Node.js 使用的 PKCS#1 应用私钥 |
+| AIPAY_ALIPAY_PUBLIC_KEY | 支付宝公钥 |
+| AIPAY_SELLER_ID / AIPAY_SELLER_EMAIL | 商户身份 |
+| AIPAY_PUBLIC_BASE_URL | 官网 HTTPS 地址，默认 https://www.smallds.icu |
+| AIPAY_RETURN_URL / AIPAY_NOTIFY_URL | 旧部署的回调地址 |
+| SUBSCRIPTION_WEBHOOK_URL / SUBSCRIPTION_WEBHOOK_SECRET | 旧部署的订阅 Webhook |
 
 安全要求：
 
 - 不要把任何变量值写入 Git、HTML、浏览器脚本、构建日志或普通运行日志。
 - ADMIN_SETUP_TOKEN 与 ADMIN_RESET_TOKEN 必须不同。
-- 四个管理员安全变量建议分别使用至少 32 字节随机值。
+- 4 个管理员安全值建议分别使用至少 32 字节随机值。
 - AIPAY_PUBLIC_KEY 是应用公钥，不是验签所需的支付宝公钥；运行时使用 AIPAY_ALIPAY_PUBLIC_KEY。
 - 之前在聊天中出现过的应用私钥已视为泄露。沙箱和正式环境都必须重新生成应用密钥，并在支付宝开放平台重新匹配应用公钥后再部署。
 
@@ -97,10 +104,12 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 2. 输入 ADMIN_SETUP_TOKEN。
 3. 使用支持 TOTP 的验证器扫描页面本地生成的二维码。
 4. 输入当前 6 位验证码完成绑定。
-5. 后续登录只需要 6 位 TOTP，管理会话有效期为 8 小时。
-6. 验证器丢失时使用 ADMIN_RESET_TOKEN 重新绑定；成功后所有旧会话立即失效。
+5. 打开“支付配置”，填写支付宝沙箱参数与新生成的 PKCS#1 应用私钥。
+6. 等待验证器显示下一组 6 位验证码，确认并加密保存支付配置。
+7. 后续登录只需要 6 位 TOTP，管理会话有效期为 8 小时。
+8. 验证器丢失时使用 ADMIN_RESET_TOKEN 重新绑定；成功后所有旧会话立即失效。
 
-系统不生成恢复码。套餐改价、退款、关单和权益调整会显示二次确认，并写入审计日志，但不会重复要求 TOTP。
+系统不生成恢复码。支付配置写入需要 TOTP；套餐改价、退款、关单和权益调整显示二次确认并写入审计日志，但不重复要求 TOTP。
 
 ## ESA WAF 建议
 
@@ -111,6 +120,7 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 | /api/admin/auth/login | 5 次 / 60 秒 | 拦截 10 分钟 |
 | /api/admin/auth/setup/start、/api/admin/auth/reset/start | 3 次 / 10 分钟 | 拦截 20 分钟 |
 | /api/admin/auth/setup/confirm、/api/admin/auth/reset/confirm | 5 次 / 10 分钟 | 拦截 20 分钟 |
+| PUT /api/admin/payment-config | 5 次 / 10 分钟 | 拦截 10 分钟 |
 | /api/admin/ 其他接口 | 120 次 / 60 秒 | 拦截 5 分钟 |
 | /api/payment/create | 20 次 / 60 秒 | 拦截 10 分钟 |
 
@@ -120,7 +130,7 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 
 ## Webhook 契约
 
-配置两个 Webhook 环境变量后，系统会发送：
+在后台支付配置中启用 Webhook 并保存地址与签名密钥后，系统会发送：
 
 - subscription.activated
 - subscription.extended
@@ -148,7 +158,7 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 
 静态页面预览可使用任意本地静态服务器；本地 file:// 或纯静态服务器无法模拟 ESA Functions、Edge KV 与支付宝回调。
 
-当前自动测试覆盖 TOTP 绑定、重放、重置、过期会话、CSRF、限流、金额快照、自然月/年、RSA2 请求签名、支付宝响应验签、通知幂等、续期、部分和全额退款、退款查询、关单、账单下载以及 Webhook 签名与重试。
+当前自动测试覆盖 TOTP 绑定、敏感配置二次验证与重放、支付配置加密和不回显、CSRF、限流、金额快照、自然月/年、RSA2 请求签名、支付宝响应验签、通知幂等、续期、部分和全额退款、退款查询、关单、账单下载以及 Webhook 签名与重试。
 
 支付宝沙箱仍需在 ESA 测试环境完成真实联调，尤其是月付、年付、异步通知、主动查询、部分退款、全额退款、关单和昨日账单下载。
 

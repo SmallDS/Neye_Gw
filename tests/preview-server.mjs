@@ -9,6 +9,9 @@ const now = new Date();
 const orderId = 'NEYE20260812103000A1B2C3D4E5F6';
 const subscriberId = 'a'.repeat(64);
 const health = {
+  source: 'admin',
+  version: 3,
+  updatedAt: now.toISOString(),
   environment: 'sandbox',
   appIdMasked: '9021****7838',
   gatewayHost: 'openapi-sandbox.dl.alipaydev.com',
@@ -24,6 +27,27 @@ const health = {
     returnUrl: true,
     notifyUrl: true,
     edgeKv: true,
+  },
+};
+const paymentConfig = {
+  source: 'admin',
+  version: 3,
+  updatedAt: now.toISOString(),
+  environment: 'sandbox',
+  appId: '9021000000000000',
+  appIdMasked: '9021****7838',
+  sellerId: '2088000000000000',
+  sellerEmail: '',
+  baseUrl: 'https://www.smallds.icu',
+  returnUrl: 'https://www.smallds.icu/api/payment/return',
+  notifyUrl: 'https://www.smallds.icu/api/payment/notify',
+  gatewayHost: 'openapi-sandbox.dl.alipaydev.com',
+  webhookEnabled: true,
+  webhookUrl: 'https://example.com/subscription',
+  secrets: {
+    applicationPrivateKey: { configured: true, fingerprint: 'A1B2C3D4E5F6' },
+    alipayPublicKey: { configured: true, fingerprint: 'F6E5D4C3B2A1' },
+    webhookSecret: { configured: true, fingerprint: '0A1B2C3D4E5F' },
   },
 };
 const order = {
@@ -167,6 +191,14 @@ function apiResponse(request) {
   if (path === '/api/admin/health') {
     return json({
       health: health,
+      storage: { namespace: 'neye-orders', eventualConsistency: true, maximumDocumentedDelaySeconds: 300 },
+    });
+  }
+  if (path === '/api/admin/payment-config') {
+    return json({
+      paymentConfig: paymentConfig,
+      health: health,
+      changedFields: request.method === 'PUT' ? ['paymentEnvironment'] : [],
       storage: { namespace: 'neye-orders', eventualConsistency: true, maximumDocumentedDelaySeconds: 300 },
     });
   }

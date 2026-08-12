@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check esa/function.js && node --check esa/lib/core.js && node --check esa/lib/auth.js && node --check esa/lib/alipay.js && node --check esa/lib/plans.js && node --check esa/lib/domain.js && node --check esa/lib/webhook.js && node --check esa/lib/api.js && node --check payment.js && node --check script.js && node --check admin/admin.js && node --check tests/site.test.mjs && node --check tests/preview-server.mjs"
+    "check": "node --check esa/function.js && node --check esa/lib/core.js && node --check esa/lib/auth.js && node --check esa/lib/payment-config.js && node --check esa/lib/alipay.js && node --check esa/lib/plans.js && node --check esa/lib/domain.js && node --check esa/lib/webhook.js && node --check esa/lib/api.js && node --check payment.js && node --check script.js && node --check admin/admin.js && node --check tests/site.test.mjs && node --check tests/preview-server.mjs"
   }
 }

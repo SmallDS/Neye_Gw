@@ -87,6 +87,9 @@ export function requireAdminConfig(config, mode = 'login') {
 }
 
 export function paymentHealth(config) {
+  const edgeKvReady = typeof config.edgeKvAvailable === 'boolean'
+    ? config.edgeKvAvailable
+    : typeof globalThis.EdgeKV === 'function';
   const checks = {
     appId: Boolean(config.appId),
     applicationPrivateKey: Boolean(config.privatePkcsKey || config.privateKey),
@@ -94,9 +97,12 @@ export function paymentHealth(config) {
     sellerIdentity: Boolean(config.sellerId || config.sellerEmail),
     returnUrl: Boolean(config.returnUrl),
     notifyUrl: Boolean(config.notifyUrl),
-    edgeKv: typeof globalThis.EdgeKV === 'function',
+    edgeKv: edgeKvReady,
   };
   return {
+    source: config.paymentConfigSource || 'environment',
+    version: Number(config.paymentConfigVersion || 0),
+    updatedAt: config.paymentConfigUpdatedAt || '',
     environment: config.paymentEnvironment,
     appIdMasked: maskIdentifier(config.appId),
     gatewayHost: safeHost(config.gateway),

@@ -307,6 +307,28 @@ export async function login(store, config, request, input) {
   return issueSession(config, credential);
 }
 
+export async function verifySensitiveTotp(store, config, request, code) {
+  requireAdminConfig(config, 'login');
+  const rate = await consumeRate(store, config, request, 'sensitive_totp', {
+    limit: 5,
+    windowMs: 10 * 60 * 1000,
+    lockMs: 10 * 60 * 1000,
+  });
+  const credential = await readCredential(store, config);
+  if (!credential) throw new AppError(409, 'ADMIN_NOT_CONFIGURED', '管理员动态验证尚未绑定。');
+  const acceptedStep = verifyTotp(credential.secret, code, {
+    lastAcceptedStep: credential.lastAcceptedStep,
+  });
+  if (acceptedStep === null) {
+    throw new AppError(401, 'TOTP_INVALID', '动态验证码不正确或已使用。');
+  }
+  credential.lastAcceptedStep = acceptedStep;
+  credential.updatedAt = new Date().toISOString();
+  await saveCredential(store, config, credential);
+  await store.delete(rate);
+  return acceptedStep;
+}
+
 export async function requireAdminSession(store, config, request, options = {}) {
   requireAdminConfig(config, 'login');
   const cookies = parseCookies(request);

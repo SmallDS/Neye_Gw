@@ -9,6 +9,7 @@ const state = {
   subscriberCursor: null,
   orderRows: [],
   subscriberRows: [],
+  paymentConfig: null,
   toastTimer: null,
 };
 
@@ -575,9 +576,40 @@ function planPayload(id) {
   };
 }
 
-async function loadHealth() {
-  const payload = await api('/api/admin/health');
+function setSecretIndicator(stateSelector, fingerprintSelector, secret) {
+  const status = one(stateSelector);
+  status.textContent = secret && secret.configured ? '已配置' : '未配置';
+  status.classList.toggle('is-ready', Boolean(secret && secret.configured));
+  one(fingerprintSelector).textContent = secret && secret.fingerprint
+    ? '指纹 ' + secret.fingerprint
+    : '保存后仅显示指纹';
+}
+
+function updateWebhookFields() {
+  const enabled = one('[data-webhook-enabled]').checked;
+  const fields = one('[data-webhook-fields]');
+  fields.classList.toggle('is-disabled', !enabled);
+  all('input', fields).forEach(function (input) { input.disabled = !enabled; });
+}
+
+function updateCallbackPreview() {
+  const input = one('[data-payment-config-form] [name="baseUrl"]');
+  let base = String(input.value || '').trim().replace(/\/+$/, '');
+  try {
+    const url = new URL(base);
+    if (url.protocol !== 'https:') throw new Error('invalid');
+    base = url.origin;
+  } catch {
+    base = '';
+  }
+  one('[data-health-return]').textContent = base ? base + '/api/payment/return' : '等待填写官网地址';
+  one('[data-health-notify]').textContent = base ? base + '/api/payment/notify' : '等待填写官网地址';
+}
+
+function renderPaymentConfig(payload) {
   const health = payload.health;
+  const config = payload.paymentConfig;
+  state.paymentConfig = config;
   const ready = one('[data-health-state]');
   ready.textContent = health.ready ? '配置完整' : '需要处理';
   ready.className = 'health-state ' + (health.ready ? 'is-ready' : 'is-error');
@@ -589,6 +621,45 @@ async function loadHealth() {
   one('[data-health-notify]').textContent = health.notifyUrl || '未配置';
   renderHealthList(one('[data-health-checks]'), health.checks);
   one('[data-sidebar-environment]').textContent = health.environment === 'production' ? '正式环境' : '沙箱环境';
+
+  const form = one('[data-payment-config-form]');
+  one('[name="paymentEnvironment"]', form).value = config.environment;
+  one('[name="appId"]', form).value = config.appId || '';
+  one('[name="sellerId"]', form).value = config.sellerId || '';
+  one('[name="sellerEmail"]', form).value = config.sellerEmail || '';
+  one('[name="baseUrl"]', form).value = config.baseUrl || '';
+  one('[name="privatePkcsKey"]', form).value = '';
+  one('[name="alipayPublicKey"]', form).value = '';
+  one('[name="totpCode"]', form).value = '';
+  one('[name="webhookEnabled"]', form).checked = config.webhookEnabled;
+  one('[name="webhookUrl"]', form).value = config.webhookUrl || '';
+  one('[name="webhookSecret"]', form).value = '';
+  one('[data-payment-config-source]').textContent = config.source === 'admin'
+    ? '后台加密配置'
+    : 'ESA 环境变量';
+  one('[data-payment-config-version]').textContent = config.version
+    ? '版本 ' + config.version + ' · ' + formatDate(config.updatedAt)
+    : '尚未保存到后台';
+  setSecretIndicator(
+    '[data-private-key-state]',
+    '[data-private-key-fingerprint]',
+    config.secrets.applicationPrivateKey
+  );
+  setSecretIndicator(
+    '[data-public-key-state]',
+    '[data-public-key-fingerprint]',
+    config.secrets.alipayPublicKey
+  );
+  const webhookSecret = config.secrets.webhookSecret;
+  one('[data-webhook-secret-state]').textContent = webhookSecret.configured
+    ? '签名密钥已配置 · 指纹 ' + webhookSecret.fingerprint
+    : '签名密钥未配置';
+  updateWebhookFields();
+  updateCallbackPreview();
+}
+
+async function loadHealth() {
+  renderPaymentConfig(await api('/api/admin/payment-config'));
 }
 
 async function loadWebhooks() {
@@ -864,6 +935,51 @@ function bindAdmin() {
         if (other !== checkbox) other.checked = false;
       });
     });
+  });
+
+  const paymentForm = one('[data-payment-config-form]');
+  one('[name="baseUrl"]', paymentForm).addEventListener('input', updateCallbackPreview);
+  one('[data-webhook-enabled]', paymentForm).addEventListener('change', updateWebhookFields);
+  paymentForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    const button = one('button[type="submit"]', paymentForm);
+    const privatePkcsKey = one('[name="privatePkcsKey"]', paymentForm).value.trim();
+    const alipayPublicKey = one('[name="alipayPublicKey"]', paymentForm).value.trim();
+    const webhookSecret = one('[name="webhookSecret"]', paymentForm).value.trim();
+    const environment = one('[name="paymentEnvironment"]', paymentForm).value;
+    const replacements = [privatePkcsKey, alipayPublicKey, webhookSecret].filter(Boolean).length;
+    const message = environment === 'production'
+      ? '将启用正式支付宝网关。请确认 APP ID、商户身份和密钥属于同一个正式应用。'
+      : replacements
+        ? '将更新沙箱配置，并替换本次填写的密钥。未填写的密钥保持不变。'
+        : '将更新沙箱配置，现有密钥保持不变。';
+    try {
+      const proceed = await confirmAction('保存支付配置', message, '确认保存');
+      if (!proceed) return;
+      buttonBusy(button, true, '加密保存中…');
+      const body = {
+        paymentEnvironment: environment,
+        appId: one('[name="appId"]', paymentForm).value.trim(),
+        sellerId: one('[name="sellerId"]', paymentForm).value.trim(),
+        sellerEmail: one('[name="sellerEmail"]', paymentForm).value.trim(),
+        baseUrl: one('[name="baseUrl"]', paymentForm).value.trim(),
+        webhookEnabled: one('[name="webhookEnabled"]', paymentForm).checked,
+        webhookUrl: one('[name="webhookUrl"]', paymentForm).value.trim(),
+        totpCode: one('[name="totpCode"]', paymentForm).value.trim(),
+      };
+      if (privatePkcsKey) body.privatePkcsKey = privatePkcsKey;
+      if (alipayPublicKey) body.alipayPublicKey = alipayPublicKey;
+      if (webhookSecret) body.webhookSecret = webhookSecret;
+      const payload = await api('/api/admin/payment-config', { method: 'PUT', body: body });
+      renderPaymentConfig(payload);
+      toast('支付配置已加密保存。');
+    } catch (error) {
+      toast(errorMessage(error), true);
+      one('[name="totpCode"]', paymentForm).value = '';
+      one('[name="totpCode"]', paymentForm).focus();
+    } finally {
+      buttonBusy(button, false);
+    }
   });
 
   one('[data-audit-filter]').addEventListener('submit', function (event) {

@@ -283,11 +283,67 @@
           </section>
 
           <section class="admin-view" data-view="health" hidden>
-            <div class="section-heading"><div><h2>支付配置状态</h2><p>密钥原文永远不会显示在页面中。</p></div><span class="health-state" data-health-state>检测中</span></div>
+            <div class="section-heading"><div><h2>支付配置</h2><p>支付宝收款参数加密保存在 Edge KV。</p></div><span class="health-state" data-health-state>检测中</span></div>
             <div class="config-summary">
               <dl><div><dt>支付环境</dt><dd data-health-environment>—</dd></div><div><dt>APP ID</dt><dd data-health-app>—</dd></div><div><dt>网关</dt><dd data-health-gateway>—</dd></div><div><dt>KV 命名空间</dt><dd data-health-kv>—</dd></div></dl>
               <div class="config-checks" data-health-checks></div>
             </div>
+
+            <section class="payment-settings">
+              <div class="settings-head">
+                <div><h3>支付宝收款设置</h3><p>保存后，新请求统一使用这里的配置。</p></div>
+                <div class="settings-meta"><span data-payment-config-source>读取中</span><small data-payment-config-version>—</small></div>
+              </div>
+              <form data-payment-config-form autocomplete="off">
+                <fieldset class="config-fieldset">
+                  <legend>基础信息</legend>
+                  <div class="config-form-grid">
+                    <label><span>支付环境</span><select name="paymentEnvironment" required><option value="sandbox">沙箱环境</option><option value="production">正式环境</option></select></label>
+                    <label><span>支付宝 APP ID</span><input name="appId" inputmode="numeric" pattern="[0-9]{8,32}" maxlength="32" required /></label>
+                    <label><span>商户 UID</span><input name="sellerId" inputmode="numeric" pattern="[0-9]{16,32}" maxlength="32" /></label>
+                    <label><span>商户邮箱（备用）</span><input name="sellerEmail" type="email" maxlength="160" /></label>
+                    <label class="span-2"><span>官网地址</span><input name="baseUrl" type="url" maxlength="500" placeholder="https://www.smallds.icu" required /></label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="config-fieldset">
+                  <legend>RSA2 密钥</legend>
+                  <div class="secret-grid">
+                    <label class="secret-field">
+                      <span class="field-title"><span>应用私钥（PKCS#1）</span><small data-private-key-state>未配置</small></span>
+                      <textarea name="privatePkcsKey" rows="5" maxlength="12000" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="留空则保留当前私钥"></textarea>
+                      <em data-private-key-fingerprint>—</em>
+                    </label>
+                    <label class="secret-field">
+                      <span class="field-title"><span>支付宝公钥</span><small data-public-key-state>未配置</small></span>
+                      <textarea name="alipayPublicKey" rows="5" maxlength="8000" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="留空则保留当前公钥"></textarea>
+                      <em data-public-key-fingerprint>—</em>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="config-fieldset">
+                  <legend>订阅 Webhook</legend>
+                  <div class="webhook-switch-row">
+                    <div><strong>发送订阅权益事件</strong><span>关闭时不发送，也不会影响订单与订阅。</span></div>
+                    <label class="switch"><input name="webhookEnabled" type="checkbox" data-webhook-enabled /><span aria-hidden="true"></span><em>启用</em></label>
+                  </div>
+                  <div class="config-form-grid webhook-fields" data-webhook-fields>
+                    <label><span>接收地址</span><input name="webhookUrl" type="url" maxlength="1000" placeholder="https://example.com/webhook" /></label>
+                    <label><span>签名密钥</span><input name="webhookSecret" type="password" minlength="32" maxlength="512" autocomplete="new-password" placeholder="留空则保留当前密钥" /></label>
+                  </div>
+                  <p class="secret-status" data-webhook-secret-state>签名密钥未配置</p>
+                </fieldset>
+
+                <div class="sensitive-save">
+                  <div><strong>确认本次修改</strong><span>输入验证器中的新 6 位验证码。</span></div>
+                  <label><span class="sr-only">动态验证码</span><input class="totp-input compact-totp" name="totpCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" required /></label>
+                  <button class="primary-button" type="submit">保存支付配置</button>
+                </div>
+                <p class="settings-root-note">后台身份、会话和数据加密根密钥仍由 ESA 托管，不会显示在此页面。</p>
+              </form>
+            </section>
+
             <section class="endpoint-ledger"><h3>回调地址</h3><div><span>同步返回</span><code data-health-return>—</code></div><div><span>异步通知</span><code data-health-notify>—</code></div></section>
           </section>
 
