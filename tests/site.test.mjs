@@ -6,6 +6,7 @@ import {
   amountToFen,
   buildSignContent,
   decryptJson,
+  readConfig,
   encodeSignedPayload,
   encryptJson,
   fenToAmount,
@@ -239,6 +240,36 @@ test('金额、联系方式、北京时间自然周期和加密信封保持精�
   assert.throws(function () { decryptJson(encrypted, 'wrong-key', 'context'); }, /加密数据/);
 });
 
+test('ESA 环境变量直接读取映射保持可用', function () {
+  const names = [
+    'ESA_KV_NAMESPACE',
+    'ADMIN_SETUP_TOKEN',
+    'ADMIN_RESET_TOKEN',
+    'ADMIN_DATA_KEY',
+    'ADMIN_SESSION_SECRET',
+  ];
+  const previous = Object.fromEntries(names.map(function (name) {
+    return [name, process.env[name]];
+  }));
+  try {
+    process.env.ESA_KV_NAMESPACE = 'direct-neye';
+    process.env.ADMIN_SETUP_TOKEN = 'setup-direct';
+    process.env.ADMIN_RESET_TOKEN = 'reset-direct';
+    process.env.ADMIN_DATA_KEY = 'data-direct';
+    process.env.ADMIN_SESSION_SECRET = 'session-direct';
+    const config = readConfig();
+    assert.equal(config.kvNamespace, 'direct-neye');
+    assert.equal(config.adminSetupToken, 'setup-direct');
+    assert.equal(config.adminResetToken, 'reset-direct');
+    assert.equal(config.adminDataKey, 'data-direct');
+    assert.equal(config.adminSessionSecret, 'session-direct');
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
 test('支付宝请求签名包含 sign_type，响应验签覆盖原始 JSON', function () {
   const params = {
     app_id: '2026000000000000',

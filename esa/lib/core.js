@@ -28,9 +28,33 @@ export class AppError extends Error {
   }
 }
 
+function readRuntimeEnv(name) {
+  if (typeof process === 'undefined' || !process.env) return '';
+  switch (name) {
+    case 'AIPAY_ENV': return process.env.AIPAY_ENV;
+    case 'AIPAY_PUBLIC_BASE_URL': return process.env.AIPAY_PUBLIC_BASE_URL;
+    case 'AIPAY_APP_ID': return process.env.AIPAY_APP_ID;
+    case 'AIPAY_PRIVATE_PKCS_KEY': return process.env.AIPAY_PRIVATE_PKCS_KEY;
+    case 'AIPAY_PRIVATE_KEY': return process.env.AIPAY_PRIVATE_KEY;
+    case 'AIPAY_ALIPAY_PUBLIC_KEY': return process.env.AIPAY_ALIPAY_PUBLIC_KEY;
+    case 'AIPAY_SELLER_ID': return process.env.AIPAY_SELLER_ID;
+    case 'AIPAY_SELLER_EMAIL': return process.env.AIPAY_SELLER_EMAIL;
+    case 'AIPAY_GATEWAY': return process.env.AIPAY_GATEWAY;
+    case 'AIPAY_RETURN_URL': return process.env.AIPAY_RETURN_URL;
+    case 'AIPAY_NOTIFY_URL': return process.env.AIPAY_NOTIFY_URL;
+    case 'ESA_KV_NAMESPACE': return process.env.ESA_KV_NAMESPACE;
+    case 'ADMIN_SETUP_TOKEN': return process.env.ADMIN_SETUP_TOKEN;
+    case 'ADMIN_RESET_TOKEN': return process.env.ADMIN_RESET_TOKEN;
+    case 'ADMIN_DATA_KEY': return process.env.ADMIN_DATA_KEY;
+    case 'ADMIN_SESSION_SECRET': return process.env.ADMIN_SESSION_SECRET;
+    case 'SUBSCRIPTION_WEBHOOK_URL': return process.env.SUBSCRIPTION_WEBHOOK_URL;
+    case 'SUBSCRIPTION_WEBHOOK_SECRET': return process.env.SUBSCRIPTION_WEBHOOK_SECRET;
+    default: return process.env[name];
+  }
+}
+
 export function readEnv(name, fallback = '') {
-  const env = globalThis.process && globalThis.process.env ? globalThis.process.env : {};
-  const value = env[name];
+  const value = readRuntimeEnv(name);
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
