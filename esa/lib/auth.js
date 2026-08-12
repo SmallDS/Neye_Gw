@@ -9,6 +9,7 @@ import {
   encryptJson,
   decryptJsonAsync,
   encryptJsonAsync,
+  isAppError,
   parseCookies,
   randomId,
   requireAdminConfig,
@@ -196,11 +197,13 @@ export async function getAuthState(store, config) {
   };
 }
 
-export async function getAuthRuntimeHealth(config) {
+export async function getAuthRuntimeHealth(store, config) {
   const health = {
     runtimeVersion: RUNTIME_VERSION,
     cryptoReady: false,
     envelopeVersion: '',
+    storageWriteReady: false,
+    storageDeleteReady: false,
     stage: '',
   };
   if (!config.adminDataKey) {
@@ -215,13 +218,31 @@ export async function getAuthRuntimeHealth(config) {
     health.envelopeVersion = String(encrypted).split('.')[0] || '';
     if (!health.cryptoReady) health.stage = 'crypto_round_trip';
   } catch (error) {
-    health.stage = error instanceof AppError ? error.code : 'crypto_runtime';
+    health.stage = isAppError(error) ? error.code : 'crypto_runtime';
+    return health;
+  }
+  const probeKey = 'v2_admin_runtime_health_probe';
+  try {
+    await store.putJson(probeKey, {
+      runtimeVersion: RUNTIME_VERSION,
+      checkedAt: new Date().toISOString(),
+    });
+    health.storageWriteReady = true;
+  } catch {
+    health.stage = 'storage_write';
+    return health;
+  }
+  try {
+    await store.delete(probeKey);
+    health.storageDeleteReady = true;
+  } catch {
+    health.stage = 'storage_delete';
   }
   return health;
 }
 
 function setupFailure(stage, error) {
-  if (error instanceof AppError) return error;
+  if (isAppError(error)) return error;
   return new AppError(503, 'ADMIN_SETUP_STAGE_FAILED', '管理后台初始化暂时不可用。', { stage: stage });
 }
 

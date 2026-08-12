@@ -348,6 +348,8 @@ test('后台认证运行时自检只返回安全状态和部署版本', async fu
     runtimeVersion: RUNTIME_VERSION,
     cryptoReady: true,
     envelopeVersion: 'v4',
+    storageWriteReady: true,
+    storageDeleteReady: true,
     stage: '',
   });
   assert.equal(JSON.stringify(body).includes('portable-test-key'), false);

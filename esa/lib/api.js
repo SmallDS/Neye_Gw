@@ -3,6 +3,7 @@ import {
   amountToFen,
   assertMethod,
   KvStore,
+  isAppError,
   localDateString,
   MAX_RANGE_DAYS,
   parseDateBoundary,
@@ -129,12 +130,7 @@ export function errorResponse(request, config, requestId, error) {
   if (new URL(request.url).pathname === '/api/payment/notify') {
     return plainResponse(request, config, requestId, 'fail', error instanceof AppError ? error.status : 500);
   }
-  const isStructuredError = error instanceof AppError || Boolean(
-    error
-    && Number.isInteger(error.status)
-    && typeof error.code === 'string'
-    && typeof error.publicMessage === 'string'
-  );
+  const isStructuredError = isAppError(error);
   const status = isStructuredError ? error.status : 500;
   const code = isStructuredError ? error.code : 'INTERNAL_ERROR';
   const message = isStructuredError ? error.publicMessage : '服务暂时不可用，请稍后重试。';
@@ -415,7 +411,7 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
   if (path === '/api/admin/auth/health') {
     assertMethod(request, 'GET');
     return jsonSuccess(request, rootConfig, requestId, {
-      health: await getAuthRuntimeHealth(rootConfig),
+      health: await getAuthRuntimeHealth(store, rootConfig),
     });
   }
   if (path === '/api/admin/auth/setup/start') {
@@ -424,7 +420,7 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
     try {
       result = await startSetup(store, rootConfig, request, await parseJsonBody(request));
     } catch (error) {
-      if (error instanceof AppError) throw error;
+      if (isAppError(error)) throw error;
       throw new AppError(503, 'ADMIN_SETUP_STAGE_FAILED', '管理后台初始化暂时不可用。', {
         stage: 'setup_route',
       });

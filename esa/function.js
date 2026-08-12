@@ -1,5 +1,6 @@
 import {
   AppError,
+  isAppError,
   loadRuntimeConfig,
   readConfig,
   requestId,
@@ -16,13 +17,13 @@ export default {
       return await routeRequest(request, { config, requestId: id });
     } catch (error) {
       const path = new URL(request.url).pathname;
-      const normalizedError = !(error instanceof AppError) && path.startsWith('/api/admin/auth/')
+      const normalizedError = !isAppError(error) && path.startsWith('/api/admin/auth/')
         ? new AppError(503, 'ADMIN_AUTH_RUNTIME_FAILED', '管理后台认证服务暂时不可用。', {
           stage: 'function_boundary',
           runtimeVersion: RUNTIME_VERSION,
         })
         : error;
-      const code = normalizedError instanceof AppError ? normalizedError.code : 'INTERNAL_ERROR';
+      const code = isAppError(normalizedError) ? normalizedError.code : 'INTERNAL_ERROR';
       console.log('neye_website_api_error', id, path, code);
       return errorResponse(request, rootConfig, id, normalizedError);
     }

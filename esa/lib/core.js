@@ -12,7 +12,7 @@ export const DEFAULT_BASE_URL = 'https://www.smallds.icu';
 export const SANDBOX_GATEWAY = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do';
 export const PRODUCTION_GATEWAY = 'https://openapi.alipay.com/gateway.do';
 export const SUCCESS_TRADE_STATUSES = Object.freeze(['TRADE_SUCCESS', 'TRADE_FINISHED']);
-export const RUNTIME_VERSION = '2026-08-13.1';
+export const RUNTIME_VERSION = '2026-08-13.2';
 export const INDEX_SHARDS = 16;
 export const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 export const MAX_RANGE_DAYS = 93;
@@ -27,6 +27,15 @@ export class AppError extends Error {
     this.publicMessage = message;
     this.details = details;
   }
+}
+
+export function isAppError(error) {
+  return error instanceof AppError || Boolean(
+    error
+    && Number.isInteger(error.status)
+    && typeof error.code === 'string'
+    && typeof error.publicMessage === 'string'
+  );
 }
 
 function readRuntimeEnv(name) {
