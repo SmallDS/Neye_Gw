@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0052d9" />
+    <meta name="description" content="NEye 订阅订单提交与支付页面。" />
+    <title>提交订阅订单｜NEye</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./payment.js" defer></script>
+  </head>
+  <body class="payment-page">
+    <a class="skip-link" href="#payment-main">跳到订单内容</a>
+
+    <header class="site-header payment-site-header">
+      <div class="container header-inner">
+        <a class="brand" href="./index.html" aria-label="返回 NEye 官网首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 36 36" role="presentation">
+              <path d="M9 27V9l18 18V9" />
+              <path class="brand-mark-cut" d="M9 9l18 18" />
+            </svg>
+          </span>
+          <span class="brand-copy"><strong>NEye</strong><span>验配工作台</span></span>
+        </a>
+        <a class="payment-back-link" href="./index.html#subscription">返回订阅方案 <span aria-hidden="true">↩</span></a>
+      </div>
+    </header>
+
+    <main id="payment-main">
+      <section class="payment-hero" aria-labelledby="payment-title">
+        <div class="container">
+          <div class="payment-hero-head">
+            <div>
+              <p class="payment-kicker">NEYE / SUBSCRIPTION</p>
+              <h1 id="payment-title">把订阅方案确认下来。</h1>
+              <p class="payment-hero-lede">先提交订单，支付方式配置完成后即可继续完成支付。</p>
+            </div>
+            <span class="payment-hero-note">订单流程 / 03</span>
+          </div>
+          <ol class="payment-steps" aria-label="订阅订单流程">
+            <li class="payment-step is-done" data-step-indicator="1"><span class="step-number" data-step-number="1">✓</span><span>选择方案</span></li>
+            <li class="payment-step is-current" data-step-indicator="2"><span class="step-number" data-step-number="2">2</span><span>提交订单</span></li>
+            <li class="payment-step" data-step-indicator="3"><span class="step-number" data-step-number="3">3</span><span>支付</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="payment-workspace">
+        <div class="container payment-layout">
+          <div class="payment-main-column">
+            <form class="payment-panel order-form" id="order-form" novalidate>
+              <div class="panel-header">
+                <div>
+                  <p class="panel-kicker">提交订单</p>
+                  <h2>确认订阅信息</h2>
+                </div>
+                <span class="panel-state" data-order-state>订单待创建</span>
+              </div>
+
+              <div class="form-block">
+                <div class="form-block-heading">
+                  <h3>选择方案</h3>
+                  <span>可随时切换</span>
+                </div>
+                <div class="plan-options" role="radiogroup" aria-label="选择订阅方案">
+                  <button class="plan-option is-selected" type="button" data-plan="monthly" aria-pressed="true">
+                    <span class="plan-option-radio" aria-hidden="true"></span>
+                    <span class="plan-option-copy"><strong>月付</strong><small>按月订阅</small></span>
+                    <span class="plan-option-price">9.9<small>元 / 月</small></span>
+                  </button>
+                  <button class="plan-option" type="button" data-plan="annual" aria-pressed="false">
+                    <span class="plan-option-radio" aria-hidden="true"></span>
+                    <span class="plan-option-copy"><strong>年付</strong><small>按年订阅</small></span>
+                    <span class="plan-option-price">99.99<small>元 / 年</small></span>
+                  </button>
+                </div>
+                <p class="field-hint">提交后会生成一笔待支付订单，当前不会发起真实扣款。</p>
+              </div>
+
+              <div class="form-block">
+                <div class="form-block-heading">
+                  <h3>联系信息</h3>
+                  <span>用于订单确认</span>
+                </div>
+                <div class="form-field-grid">
+                  <label class="form-field">
+                    <span class="form-label">联系人 <em>*</em></span>
+                    <input id="contact-name" name="contactName" type="text" autocomplete="name" placeholder="请输入姓名" required />
+                  </label>
+                  <label class="form-field">
+                    <span class="form-label">联系方式 <em>*</em></span>
+                    <input id="contact-method" name="contactMethod" type="text" autocomplete="email" placeholder="手机号或邮箱" required />
+                  </label>
+                </div>
+                <label class="form-field">
+                  <span class="form-label">备注 <small>可选</small></span>
+                  <textarea id="order-note" name="orderNote" rows="3" placeholder="可以填写门店名称或其他说明"></textarea>
+                </label>
+              </div>
+
+              <label class="consent-field" for="order-consent">
+                <input id="order-consent" type="checkbox" required />
+                <span>我已确认订阅方案和价格，了解当前支付方式尚未配置。</span>
+              </label>
+
+              <div class="secure-note"><span class="note-mark" aria-hidden="true">N</span><span>订单信息仅保存在当前浏览器，用于演示完整提交流程。</span></div>
+              <div class="panel-actions">
+                <button class="button button-primary" type="submit">提交订单 <span aria-hidden="true">→</span></button>
+                <a class="text-link" href="./index.html#subscription">返回方案 <span aria-hidden="true">↩</span></a>
+              </div>
+              <p class="form-feedback" data-form-feedback aria-live="polite"></p>
+            </form>
+
+            <section class="payment-panel order-result" data-order-result hidden aria-labelledby="order-result-title" aria-live="polite">
+              <div class="order-result-heading">
+                <span class="order-success-mark" aria-hidden="true">✓</span>
+                <div>
+                  <p class="panel-kicker">订单已提交</p>
+                  <h2 id="order-result-title">订单创建成功。</h2>
+                </div>
+              </div>
+              <p class="order-result-copy">订单已保存。点击“立即支付”时会检查支付方式配置，当前不会产生扣款。</p>
+              <div class="order-meta">
+                <div><span>订单号</span><strong data-order-id>—</strong></div>
+                <div><span>订阅方案</span><strong data-order-plan>—</strong></div>
+                <div><span>提交时间</span><strong data-order-time>—</strong></div>
+              </div>
+              <div class="order-result-actions">
+                <button class="button button-primary" type="button" data-pay-button>立即支付 <span aria-hidden="true">→</span></button>
+                <button class="button button-secondary" type="button" data-reset-order>重新提交</button>
+              </div>
+              <p class="payment-feedback" data-payment-feedback role="alert" tabindex="-1"></p>
+            </section>
+          </div>
+
+          <aside class="payment-summary" aria-label="订单摘要">
+            <div class="summary-top"><p class="panel-kicker">订单摘要</p><span class="summary-status" data-summary-state>待提交</span></div>
+            <div class="summary-plan">
+              <span class="summary-mark" aria-hidden="true">N</span>
+              <span><strong data-summary-plan>月付订阅</strong><small>NEye 订阅服务</small></span>
+            </div>
+            <div class="summary-lines">
+              <div class="summary-line"><span>订阅周期</span><strong data-summary-cycle>每月</strong></div>
+              <div class="summary-line"><span>支付方式</span><strong data-summary-payment>待配置</strong></div>
+            </div>
+            <div class="summary-total"><span>应付金额</span><strong data-summary-price>¥ 9.9</strong></div>
+            <div class="summary-foot"><span class="summary-foot-mark">i</span><p>支付方式配置完成后，订单可继续完成支付。</p></div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner"><div class="footer-brand"><span class="brand-mark brand-mark-small" aria-hidden="true"><svg viewBox="0 0 36 36" role="presentation"><path d="M9 27V9l18 18V9" /><path class="brand-mark-cut" d="M9 9l18 18" /></svg></span><span><strong>NEye</strong><small>客户与验配工作台</small></span></div><p>订阅订单 · 支付方式预留</p><span class="footer-year">© 2026 NEye</span></div>
+    </footer>
+  </body>
+</html>
