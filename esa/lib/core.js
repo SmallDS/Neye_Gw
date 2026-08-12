@@ -495,7 +495,7 @@ export function decryptJson(payload, secret, context) {
 }
 
 export async function encryptJsonAsync(value, secret, context) {
-  return encryptJson(value, secret, context);
+  return encryptJsonPortable(value, secret, context);
 }
 
 export async function decryptJsonAsync(payload, secret, context) {

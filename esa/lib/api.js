@@ -405,7 +405,15 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
   }
   if (path === '/api/admin/auth/setup/start') {
     assertMethod(request, 'POST');
-    const result = await startSetup(store, rootConfig, request, await parseJsonBody(request));
+    let result;
+    try {
+      result = await startSetup(store, rootConfig, request, await parseJsonBody(request));
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(503, 'ADMIN_SETUP_STAGE_FAILED', '管理后台初始化暂时不可用。', {
+        stage: 'setup_route',
+      });
+    }
     return jsonSuccess(request, rootConfig, requestId, { challenge: result }, 201);
   }
   if (path === '/api/admin/auth/setup/confirm') {

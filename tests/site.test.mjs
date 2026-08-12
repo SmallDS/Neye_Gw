@@ -277,7 +277,7 @@ test('ESA 环境变量直接读取映射保持可用', function () {
 });
 test('后台认证使用 ESA 兼容加密挑战与凭据', async function () {
   const encrypted = await encryptJsonAsync({ value: 'totp-secret' }, 'webcrypto-test-key', 'admin-test');
-  assert.match(encrypted, /^v[1-4]\./);
+  assert.match(encrypted, /^v4\./);
   assert.deepEqual(
     await decryptJsonAsync(encrypted, 'webcrypto-test-key', 'admin-test'),
     { value: 'totp-secret' },
