@@ -1,0 +1,9 @@
+{
+  "name": "Neye_Gw",
+  "entry": "./esa/function.js",
+  "installCommand": "",
+  "buildCommand": "",
+  "assets": {
+    "directory": "."
+  }
+}

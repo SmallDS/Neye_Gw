@@ -476,6 +476,9 @@ button { border: 0; cursor: pointer; }
 .order-meta strong { display: block; margin-top: 7px; color: var(--ink); font-size: 13px; font-weight: 700; }
 .payment-feedback { display: none; margin: 18px 0 0; padding: 13px 15px; border: 1px solid #ffd6b0; border-radius: 8px; background: var(--amber-soft); color: var(--amber); font-size: 12px; line-height: 1.7; }
 .payment-feedback.is-error { display: block; }
+.payment-feedback.is-success, .payment-feedback.is-pending { display: block; }
+.payment-feedback.is-success { border-color: #b7ebd7; background: #edf9f3; color: #007a50; }
+.payment-feedback.is-pending { border-color: #ffe0ad; background: #fff7e8; color: #8a5200; }
 .payment-summary { position: sticky; top: 96px; padding: 24px; }
 .summary-plan { display: flex; align-items: center; gap: 12px; margin-top: 26px; padding: 18px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .summary-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--blue); color: white; font-size: 15px; font-weight: 700; }
