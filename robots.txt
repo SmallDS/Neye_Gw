@@ -1,3 +1,8 @@
 User-agent: *
 Allow: /
+Disallow: /admin/
+Disallow: /payment.html
+Disallow: /api/admin/
+Disallow: /api/payment/
+
 Sitemap: https://www.smallds.icu/sitemap.xml

@@ -1,8 +1,9 @@
 (() => {
   const plans = {
-    monthly: { label: '月付订阅', cycle: '每月', price: '9.9', unit: '元 / 月' },
-    annual: { label: '年付订阅', cycle: '每年', price: '99.99', unit: '元 / 年' },
+    monthly: { label: '月付订阅', cycle: '每月', price: '9.9', priceFen: 990, unit: '元 / 月', description: '一个自然月', enabled: true },
+    annual: { label: '年付订阅', cycle: '每年', price: '99.99', priceFen: 9999, unit: '元 / 年', description: '一个自然年', enabled: true },
   };
+  let salesEnabled = true;
   const storageKey = 'neye-subscription-orders';
   const planButtons = [...document.querySelectorAll('[data-plan]')];
   const orderForm = document.querySelector('#order-form');
@@ -24,10 +25,12 @@
   const orderPlan = document.querySelector('[data-order-plan]');
   const orderTime = document.querySelector('[data-order-time]');
   const payButton = document.querySelector('[data-pay-button]');
+  const refreshButton = document.querySelector('[data-refresh-payment]');
   const resetButton = document.querySelector('[data-reset-order]');
   const stepIndicators = [...document.querySelectorAll('[data-step-indicator]')];
   const submitButtonMarkup = submitButton?.innerHTML || '';
   const payButtonMarkup = payButton?.innerHTML || '';
+  const refreshButtonMarkup = refreshButton?.innerHTML || '';
   let currentPlanId = new URLSearchParams(window.location.search).get('plan');
   let latestOrder = null;
   let orderInFlight = false;
@@ -64,7 +67,7 @@
   };
 
   const setPlan = (planId) => {
-    if (!plans[planId]) return;
+    if (!plans[planId] || !plans[planId].enabled) return;
     currentPlanId = planId;
     const plan = plans[planId];
     planButtons.forEach((button) => {
@@ -76,6 +79,50 @@
     if (summaryCycle) summaryCycle.textContent = plan.cycle;
     if (summaryPrice) summaryPrice.textContent = '¥ ' + plan.price;
     updateUrl();
+  };
+
+  const formatPlanPrice = (fen) => {
+    const fixed = (Number(fen) / 100).toFixed(2);
+    return fixed.replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  };
+
+  const loadPlans = async () => {
+    try {
+      const data = await fetchJson('/api/subscription/plans');
+      const config = data.plans;
+      if (!config?.plans) return;
+      salesEnabled = Boolean(config.salesEnabled);
+      config.plans.forEach((plan) => {
+        if (!plans[plan.id]) return;
+        plans[plan.id] = {
+          label: plan.name,
+          cycle: plan.periodUnit === 'year' ? '每年' : '每月',
+          price: formatPlanPrice(plan.priceFen),
+          priceFen: plan.priceFen,
+          unit: plan.periodUnit === 'year' ? '元 / 年' : '元 / 月',
+          description: plan.description,
+          enabled: Boolean(plan.enabled),
+        };
+        const button = planButtons.find((item) => item.dataset.plan === plan.id);
+        if (!button) return;
+        button.querySelector('[data-option-name]').textContent = plan.name;
+        button.querySelector('[data-option-description]').textContent = plan.description;
+        button.querySelector('[data-option-price]').textContent = plans[plan.id].price;
+        button.querySelector('[data-option-unit]').textContent = plans[plan.id].unit;
+        button.disabled = !salesEnabled || !plan.enabled;
+      });
+      const available = Object.keys(plans).find((id) => plans[id].enabled && salesEnabled);
+      if (available && (!plans[currentPlanId]?.enabled || !salesEnabled)) currentPlanId = available;
+      const summary = document.querySelector('[data-plan-summary]');
+      const visible = Object.values(plans).filter((plan) => plan.enabled);
+      if (summary && visible.length) {
+        summary.textContent = visible.map((plan) => plan.label + ' ' + plan.price + ' 元').join(' · ');
+      }
+      setPlan(currentPlanId);
+      if (!salesEnabled) setFeedback(formFeedback, '订阅销售当前暂停。', 'is-pending');
+    } catch {
+      // 接口不可用时继续使用静态默认套餐。
+    }
   };
 
   const saveOrder = (order) => {
@@ -129,15 +176,28 @@
     if (orderPlan) orderPlan.textContent = plan.label + ' · ' + plan.price + ' ' + plan.unit;
     if (orderTime) orderTime.textContent = formatTime(order.createdAt);
     const paid = order.paymentStatus === 'paid';
-    if (orderState) orderState.textContent = paid ? '已支付' : '待支付';
-    if (summaryState) summaryState.textContent = paid ? '已支付' : '待支付';
-    if (summaryPayment) summaryPayment.textContent = paid ? '已完成' : '支付宝沙箱';
+    const stateLabels = {
+      pending: '待支付',
+      paid: '已支付',
+      partially_refunded: '部分退款',
+      refunded: '已退款',
+      closed: '已关闭',
+    };
+    const stateLabel = stateLabels[order.paymentStatus] || '确认中';
+    if (orderState) orderState.textContent = stateLabel;
+    if (summaryState) summaryState.textContent = stateLabel;
+    if (summaryPayment) summaryPayment.textContent = paid ? '已完成' : '支付宝';
     updateSteps(true, paid);
     if (orderForm) orderForm.hidden = true;
     if (payButton) {
       payButton.hidden = paid || !order.paymentForm;
       payButton.disabled = paid || !order.paymentForm;
       payButton.innerHTML = payButtonMarkup;
+    }
+    if (refreshButton) {
+      refreshButton.hidden = paid || Boolean(order.paymentForm);
+      refreshButton.disabled = paid;
+      refreshButton.innerHTML = refreshButtonMarkup;
     }
     if (orderResult) {
       orderResult.hidden = false;
@@ -155,7 +215,8 @@
       throw new Error('支付服务返回了无效响应。');
     }
     if (!response.ok || data.ok === false) {
-      throw new Error(data.error || '支付服务暂时不可用。');
+      const message = typeof data.error === 'string' ? data.error : data.error?.message;
+      throw new Error(message || '支付服务暂时不可用。');
     }
     return data;
   };
@@ -193,6 +254,9 @@
   };
 
   const submitOrder = async () => {
+    if (!salesEnabled || !plans[currentPlanId]?.enabled) {
+      throw new Error('所选订阅套餐当前不可用。');
+    }
     const payload = {
       plan: currentPlanId,
       contactName: contactName?.value.trim() || '',
@@ -230,6 +294,7 @@
   };
 
   planButtons.forEach((button) => button.addEventListener('click', () => {
+    if (button.disabled) return;
     setPlan(button.dataset.plan);
     setFeedback(formFeedback, '');
   }));
@@ -255,6 +320,26 @@
     }
   });
 
+  refreshButton?.addEventListener('click', async () => {
+    if (!latestOrder?.id || paymentInFlight) return;
+    paymentInFlight = true;
+    setFeedback(paymentFeedback, '');
+    setButtonBusy(refreshButton, true, '正在查询…', refreshButtonMarkup);
+    try {
+      const data = await fetchJson('/api/payment/status?out_trade_no=' + encodeURIComponent(latestOrder.id));
+      showOrderResult(data.order);
+      if (data.order.paymentStatus === 'paid') {
+        setFeedback(paymentFeedback, '支付成功，订单已确认。', 'is-success');
+      } else {
+        setFeedback(paymentFeedback, '暂未确认支付结果，可稍后再次刷新。', 'is-pending');
+      }
+    } catch (error) {
+      setFeedback(paymentFeedback, displayError(error), 'is-error');
+    } finally {
+      paymentInFlight = false;
+      setButtonBusy(refreshButton, false, '', refreshButtonMarkup);
+    }
+  });
   payButton?.addEventListener('click', () => {
     if (!latestOrder?.paymentForm || paymentInFlight) return;
     paymentInFlight = true;
@@ -282,19 +367,25 @@
     }
     if (orderState) orderState.textContent = '订单待创建';
     if (summaryState) summaryState.textContent = '待提交';
-    if (summaryPayment) summaryPayment.textContent = '支付宝沙箱';
+    if (summaryPayment) summaryPayment.textContent = '支付宝';
     setFeedback(formFeedback, '');
     setFeedback(paymentFeedback, '');
     setButtonBusy(submitButton, false, '', submitButtonMarkup);
     setButtonBusy(payButton, false, '', payButtonMarkup);
+    setButtonBusy(refreshButton, false, '', refreshButtonMarkup);
     if (payButton) payButton.hidden = false;
+    if (refreshButton) refreshButton.hidden = true;
     updateSteps(false);
     orderForm?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   [contactName, contactMethod, orderNote].forEach((field) => field?.addEventListener('input', () => setFeedback(formFeedback, '')));
   consent?.addEventListener('change', () => setFeedback(formFeedback, ''));
-  setPlan(currentPlanId);
-  updateSteps(false);
-  void loadReturnState();
+  const initialize = async () => {
+    await loadPlans();
+    setPlan(currentPlanId);
+    updateSteps(false);
+    await loadReturnState();
+  };
+  void initialize();
 })();

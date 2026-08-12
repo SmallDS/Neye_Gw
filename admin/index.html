@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0052d9" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+    <title>官网订阅管理｜NEye</title>
+    <link rel="stylesheet" href="./admin.css" />
+    <script src="./vendor/qrcode.js" defer></script>
+    <script src="./admin.js" defer></script>
+  </head>
+  <body>
+    <!--
+      THESIS: 这是官网订阅的运行台，拒绝把关键状态埋进装饰型卡片。
+      OWN-WORLD: 延续 NEye 的蓝、墨色、冷灰与紧凑线框控件，数据区以表格和分隔带为主。
+      STORY: 管理员先确认收入与异常，再进入订单、订阅、套餐、对账和系统状态完成操作。
+      FIRST VIEWPORT: 左侧固定任务导航，右侧先呈现时间范围、核心经营数据、最近订单和配置健康。
+      FORM: 采用高密度但克制的 Operate 工作台结构；桌面双栏，移动端收拢为顶部导航与纵向数据块。
+    -->
+    <a class="skip-link" href="#admin-main">跳到主要内容</a>
+
+    <section class="auth-shell" data-auth-shell>
+      <div class="auth-brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 36 36"><path d="M9 27V9l18 18V9"></path><path class="brand-mark-cut" d="M9 9l18 18"></path></svg>
+        </span>
+        <span><strong>NEye</strong><small>官网订阅管理</small></span>
+      </div>
+
+      <div class="auth-stage">
+        <div class="auth-intro">
+          <p class="auth-kicker">NEYE / WEBSITE OPERATIONS</p>
+          <h1>支付、订单与订阅，保持同一套事实。</h1>
+          <p>本后台仅管理官网订阅。动态验证码绑定后，所有金额与权益操作都会进入审计记录。</p>
+          <div class="auth-security">
+            <span>6 位 TOTP</span>
+            <span>8 小时会话</span>
+            <span>边缘数据加密</span>
+          </div>
+        </div>
+
+        <div class="auth-panel">
+          <div class="auth-loading" data-auth-loading>
+            <span class="loading-line"></span><span class="loading-line short"></span><span class="loading-block"></span>
+          </div>
+
+          <section data-auth-view="setup" hidden>
+            <p class="panel-kicker">首次启用</p>
+            <h2>绑定管理员验证器</h2>
+            <p class="panel-copy">输入部署时配置的初始化令牌，随后使用验证器扫描本地生成的二维码。</p>
+            <form class="stack-form" data-setup-start-form>
+              <label>
+                <span>初始化令牌</span>
+                <input name="token" type="password" autocomplete="off" required />
+              </label>
+              <button class="primary-button" type="submit">开始绑定 <span aria-hidden="true">→</span></button>
+            </form>
+            <div class="totp-bind" data-setup-confirm hidden>
+              <div class="qr-frame" data-setup-qr aria-label="TOTP 绑定二维码"></div>
+              <div class="secret-row">
+                <span>手动输入密钥</span>
+                <code data-setup-secret></code>
+                <button class="text-button" type="button" data-copy-secret>复制</button>
+              </div>
+              <form class="stack-form" data-setup-confirm-form>
+                <label>
+                  <span>验证器中的 6 位验证码</span>
+                  <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required />
+                </label>
+                <button class="primary-button" type="submit">确认并进入后台</button>
+              </form>
+            </div>
+          </section>
+
+          <section data-auth-view="login" hidden>
+            <p class="panel-kicker">管理员验证</p>
+            <h2>输入动态验证码</h2>
+            <p class="panel-copy">打开已绑定的验证器，输入当前 6 位验证码。</p>
+            <form class="stack-form" data-login-form>
+              <label>
+                <span>动态验证码</span>
+                <input class="totp-input" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" autofocus required />
+              </label>
+              <button class="primary-button" type="submit">验证并登录 <span aria-hidden="true">→</span></button>
+            </form>
+            <button class="text-button auth-reset-link" type="button" data-show-reset>无法使用原验证器</button>
+          </section>
+
+          <section data-auth-view="reset" hidden>
+            <p class="panel-kicker">重新绑定</p>
+            <h2>更换管理员验证器</h2>
+            <p class="panel-copy">重新绑定成功后，所有旧会话会立即失效。</p>
+            <form class="stack-form" data-reset-start-form>
+              <label>
+                <span>重置令牌</span>
+                <input name="token" type="password" autocomplete="off" required />
+              </label>
+              <button class="primary-button" type="submit">生成新绑定信息</button>
+            </form>
+            <div class="totp-bind" data-reset-confirm hidden>
+              <div class="qr-frame" data-reset-qr aria-label="新 TOTP 绑定二维码"></div>
+              <div class="secret-row">
+                <span>手动输入密钥</span>
+                <code data-reset-secret></code>
+              </div>
+              <form class="stack-form" data-reset-confirm-form>
+                <label>
+                  <span>新验证器中的 6 位验证码</span>
+                  <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required />
+                </label>
+                <button class="primary-button" type="submit">确认重新绑定</button>
+              </form>
+            </div>
+            <button class="text-button auth-reset-link" type="button" data-show-login>返回登录</button>
+          </section>
+
+          <p class="form-message" data-auth-message role="alert" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <div class="admin-shell" data-admin-shell hidden>
+      <aside class="sidebar">
+        <a class="sidebar-brand" href="./" aria-label="NEye 官网订阅管理首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 36 36"><path d="M9 27V9l18 18V9"></path><path class="brand-mark-cut" d="M9 9l18 18"></path></svg>
+          </span>
+          <span><strong>NEye</strong><small>官网订阅管理</small></span>
+        </a>
+
+        <nav class="admin-nav" aria-label="管理后台导航">
+          <button class="is-active" type="button" data-view-target="dashboard"><span>概览</span><small>01</small></button>
+          <button type="button" data-view-target="orders"><span>订单</span><small>02</small></button>
+          <button type="button" data-view-target="subscribers"><span>订阅用户</span><small>03</small></button>
+          <button type="button" data-view-target="plans"><span>套餐设置</span><small>04</small></button>
+          <button type="button" data-view-target="reconciliation"><span>对账与导出</span><small>05</small></button>
+          <button type="button" data-view-target="health"><span>支付配置</span><small>06</small></button>
+          <button type="button" data-view-target="webhooks"><span>Webhook</span><small>07</small></button>
+          <button type="button" data-view-target="audit"><span>审计日志</span><small>08</small></button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div><span class="live-dot"></span><span data-sidebar-environment>检测中</span></div>
+          <button type="button" data-logout>退出</button>
+        </div>
+      </aside>
+
+      <main class="admin-main" id="admin-main">
+        <header class="topbar">
+          <div>
+            <p class="topbar-kicker">WEBSITE SUBSCRIPTION</p>
+            <h1 data-view-title>概览</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="sync-notice" title="ESA Edge KV 为最终一致存储"><span></span>数据同步中</span>
+            <button class="secondary-button compact" type="button" data-refresh>刷新数据</button>
+          </div>
+        </header>
+
+        <div class="view-stack">
+          <section class="admin-view is-active" data-view="dashboard">
+            <div class="section-heading">
+              <div><h2>最近 30 天</h2><p>订单、实收、退款与订阅状态。</p></div>
+              <span class="range-label" data-dashboard-range>—</span>
+            </div>
+            <div class="metric-strip" data-dashboard-metrics>
+              <div><span>订单量</span><strong data-metric="orders">—</strong></div>
+              <div><span>实收</span><strong data-metric="grossFen">—</strong></div>
+              <div><span>已退款</span><strong data-metric="refundedFen">—</strong></div>
+              <div><span>待支付</span><strong data-metric="pending">—</strong></div>
+              <div><span>有效订阅</span><strong data-metric="activeSubscriptions">—</strong></div>
+              <div><span>7 天内到期</span><strong data-metric="expiringSubscriptions">—</strong></div>
+            </div>
+            <div class="dashboard-grid">
+              <section class="data-section">
+                <div class="data-section-head"><div><h3>最近订单</h3><p>按创建时间排序</p></div><button class="text-button" type="button" data-go-orders>查看全部</button></div>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>订单</th><th>套餐</th><th>金额</th><th>状态</th><th>时间</th></tr></thead>
+                    <tbody data-dashboard-orders></tbody>
+                  </table>
+                </div>
+                <div class="empty-state" data-dashboard-empty hidden><strong>还没有订单</strong><span>新订单创建后会显示在这里。</span></div>
+              </section>
+              <aside class="health-rail">
+                <div class="data-section-head"><div><h3>支付配置</h3><p>只显示配置状态</p></div><button class="text-button" type="button" data-go-health>查看详情</button></div>
+                <div class="health-list" data-dashboard-health></div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="admin-view" data-view="orders" hidden>
+            <div class="section-heading"><div><h2>订单管理</h2><p>查询、同步、关单与退款。</p></div></div>
+            <form class="filter-bar" data-order-filter>
+              <label><span>开始日期</span><input name="from" type="date" /></label>
+              <label><span>结束日期</span><input name="to" type="date" /></label>
+              <label><span>状态</span><select name="status"><option value="">全部状态</option><option value="pending">待支付</option><option value="paid">已支付</option><option value="partially_refunded">部分退款</option><option value="refunded">已退款</option><option value="closed">已关闭</option></select></label>
+              <label><span>套餐</span><select name="plan"><option value="">全部套餐</option><option value="monthly">月付</option><option value="annual">年付</option></select></label>
+              <label class="search-field"><span>精确查询</span><div><select name="searchType" aria-label="查询字段"><option value="orderId">订单号</option><option value="tradeNo">支付宝交易号</option><option value="contact">手机号或邮箱</option></select><input name="search" type="search" autocomplete="off" /></div></label>
+              <button class="primary-button compact" type="submit">查询</button>
+            </form>
+            <section class="data-section table-section">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>订单号</th><th>联系人</th><th>套餐</th><th>金额</th><th>状态</th><th>创建时间</th><th><span class="sr-only">操作</span></th></tr></thead>
+                  <tbody data-orders-body></tbody>
+                </table>
+              </div>
+              <div class="empty-state" data-orders-empty hidden><strong>没有匹配的订单</strong><span>可以调整日期或筛选条件后重试。</span></div>
+              <div class="pagination"><span data-orders-total>0 条记录</span><button class="secondary-button compact" type="button" data-orders-more hidden>加载更多</button></div>
+            </section>
+          </section>
+
+          <section class="admin-view" data-view="subscribers" hidden>
+            <div class="section-heading"><div><h2>订阅用户</h2><p>查看有效期、购买记录与人工调整。</p></div></div>
+            <form class="filter-bar subscriber-filter" data-subscriber-filter>
+              <label><span>状态</span><select name="status"><option value="">全部状态</option><option value="active">有效</option><option value="expiring">即将到期</option><option value="expired">已过期</option></select></label>
+              <label class="search-field"><span>手机号或邮箱（精确）</span><input name="contact" type="search" autocomplete="off" /></label>
+              <button class="primary-button compact" type="submit">查询</button>
+            </form>
+            <section class="data-section table-section">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>订阅用户</th><th>联系方式</th><th>状态</th><th>到期时间</th><th>权益记录</th><th><span class="sr-only">操作</span></th></tr></thead>
+                  <tbody data-subscribers-body></tbody>
+                </table>
+              </div>
+              <div class="empty-state" data-subscribers-empty hidden><strong>还没有订阅用户</strong><span>订单确认支付后会自动生成订阅权益。</span></div>
+              <div class="pagination"><span data-subscribers-total>0 条记录</span><button class="secondary-button compact" type="button" data-subscribers-more hidden>加载更多</button></div>
+            </section>
+          </section>
+
+          <section class="admin-view" data-view="plans" hidden>
+            <div class="section-heading"><div><h2>套餐设置</h2><p>改价只影响新订单，历史订单保留原套餐快照。</p></div><span class="version-tag" data-plan-version>版本 —</span></div>
+            <form data-plan-form>
+              <div class="sales-switch">
+                <div><strong>全站订阅销售</strong><span>关闭后前台保留套餐展示，但不能创建新订单。</span></div>
+                <label class="switch"><input name="salesEnabled" type="checkbox" /><span aria-hidden="true"></span><em>启用销售</em></label>
+              </div>
+              <div class="plan-editor-grid">
+                <fieldset data-plan-editor="monthly">
+                  <legend><span>月付套餐</span><small data-plan-editor-version>v1</small></legend>
+                  <label><span>名称</span><input name="name" maxlength="40" required /></label>
+                  <label><span>说明</span><textarea name="description" maxlength="160" rows="3" required></textarea></label>
+                  <div class="form-grid-2">
+                    <label><span>价格（元）</span><input name="price" type="number" min="0.01" max="100000000" step="0.01" required /></label>
+                    <label><span>待支付超时（分钟）</span><input name="timeoutMinutes" type="number" min="5" max="1440" step="1" required /></label>
+                  </div>
+                  <div class="inline-checks"><label><input name="enabled" type="checkbox" />启用</label><label><input name="recommended" type="checkbox" />推荐</label></div>
+                </fieldset>
+                <fieldset data-plan-editor="annual">
+                  <legend><span>年付套餐</span><small data-plan-editor-version>v1</small></legend>
+                  <label><span>名称</span><input name="name" maxlength="40" required /></label>
+                  <label><span>说明</span><textarea name="description" maxlength="160" rows="3" required></textarea></label>
+                  <div class="form-grid-2">
+                    <label><span>价格（元）</span><input name="price" type="number" min="0.01" max="100000000" step="0.01" required /></label>
+                    <label><span>待支付超时（分钟）</span><input name="timeoutMinutes" type="number" min="5" max="1440" step="1" required /></label>
+                  </div>
+                  <div class="inline-checks"><label><input name="enabled" type="checkbox" />启用</label><label><input name="recommended" type="checkbox" />推荐</label></div>
+                </fieldset>
+              </div>
+              <div class="form-actions"><button class="primary-button" type="submit">保存套餐设置</button><span data-plan-updated>—</span></div>
+            </form>
+          </section>
+
+          <section class="admin-view" data-view="reconciliation" hidden>
+            <div class="section-heading"><div><h2>对账与导出</h2><p>支付宝交易账单仅支持昨日或更早日期。</p></div></div>
+            <div class="reconcile-grid">
+              <section class="operation-panel">
+                <p class="panel-kicker">ALIPAY BILL</p><h3>下载支付宝交易账单</h3>
+                <p>服务端获取 30 秒有效的下载地址后立即转发文件，不会把临时地址暴露到浏览器。</p>
+                <form class="inline-operation" data-bill-form><label><span>账单日期</span><input name="date" type="date" required /></label><button class="primary-button" type="submit">下载账单</button></form>
+              </section>
+              <section class="operation-panel">
+                <p class="panel-kicker">ORDER EXPORT</p><h3>导出官网订单 CSV</h3>
+                <p>导出选定日期范围内的订单、联系方式、交易号和退款汇总，单次最多 3 个月。</p>
+                <form class="inline-operation range-operation" data-export-form><label><span>开始日期</span><input name="from" type="date" required /></label><label><span>结束日期</span><input name="to" type="date" required /></label><button class="secondary-button" type="submit">导出 CSV</button></form>
+              </section>
+            </div>
+          </section>
+
+          <section class="admin-view" data-view="health" hidden>
+            <div class="section-heading"><div><h2>支付配置状态</h2><p>密钥原文永远不会显示在页面中。</p></div><span class="health-state" data-health-state>检测中</span></div>
+            <div class="config-summary">
+              <dl><div><dt>支付环境</dt><dd data-health-environment>—</dd></div><div><dt>APP ID</dt><dd data-health-app>—</dd></div><div><dt>网关</dt><dd data-health-gateway>—</dd></div><div><dt>KV 命名空间</dt><dd data-health-kv>—</dd></div></dl>
+              <div class="config-checks" data-health-checks></div>
+            </div>
+            <section class="endpoint-ledger"><h3>回调地址</h3><div><span>同步返回</span><code data-health-return>—</code></div><div><span>异步通知</span><code data-health-notify>—</code></div></section>
+          </section>
+
+          <section class="admin-view" data-view="webhooks" hidden>
+            <div class="section-heading"><div><h2>订阅 Webhook</h2><p>未配置时完全禁用，不影响支付和权益记录。</p></div><span class="health-state" data-webhook-state>检测中</span></div>
+            <section class="data-section table-section">
+              <div class="table-wrap">
+                <table><thead><tr><th>事件</th><th>类型</th><th>订单</th><th>状态</th><th>尝试次数</th><th>更新时间</th><th><span class="sr-only">操作</span></th></tr></thead><tbody data-webhooks-body></tbody></table>
+              </div>
+              <div class="empty-state" data-webhooks-empty hidden><strong>没有 Webhook 事件</strong><span>未配置或尚未产生订阅权益事件。</span></div>
+            </section>
+          </section>
+
+          <section class="admin-view" data-view="audit" hidden>
+            <div class="section-heading"><div><h2>审计日志</h2><p>记录管理操作与支付宝通知处理，不保存密钥和个人信息。</p></div></div>
+            <form class="filter-bar audit-filter" data-audit-filter><label><span>开始日期</span><input name="from" type="date" /></label><label><span>结束日期</span><input name="to" type="date" /></label><label><span>动作</span><input name="action" type="search" autocomplete="off" /></label><button class="primary-button compact" type="submit">查询</button></form>
+            <section class="data-section table-section">
+              <div class="table-wrap"><table><thead><tr><th>时间</th><th>执行方</th><th>动作</th><th>对象</th><th>结果</th><th>请求编号</th></tr></thead><tbody data-audit-body></tbody></table></div>
+              <div class="empty-state" data-audit-empty hidden><strong>没有审计记录</strong><span>管理操作完成后会显示在这里。</span></div>
+            </section>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <dialog class="detail-dialog" data-order-dialog>
+      <div class="dialog-head"><div><p class="panel-kicker">ORDER DETAIL</p><h2 data-order-dialog-title>订单详情</h2></div><button class="icon-button" type="button" data-close-order-dialog aria-label="关闭">×</button></div>
+      <div class="dialog-body" data-order-detail></div>
+    </dialog>
+
+    <dialog class="detail-dialog" data-subscriber-dialog>
+      <div class="dialog-head"><div><p class="panel-kicker">SUBSCRIPTION DETAIL</p><h2 data-subscriber-dialog-title>订阅详情</h2></div><button class="icon-button" type="button" data-close-subscriber-dialog aria-label="关闭">×</button></div>
+      <div class="dialog-body" data-subscriber-detail></div>
+    </dialog>
+
+    <dialog class="confirm-dialog" data-confirm-dialog>
+      <form method="dialog">
+        <p class="panel-kicker">CONFIRM ACTION</p>
+        <h2 data-confirm-title>确认操作</h2>
+        <p data-confirm-message></p>
+        <div class="dialog-actions"><button class="secondary-button" value="cancel">取消</button><button class="danger-button" value="confirm" data-confirm-action>确认</button></div>
+      </form>
+    </dialog>
+
+    <div class="toast-region" data-toast role="status" aria-live="polite"></div>
+  </body>
+</html>

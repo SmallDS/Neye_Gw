@@ -35,7 +35,7 @@
             <div>
               <p class="payment-kicker">NEYE / SUBSCRIPTION</p>
               <h1 id="payment-title">订阅方案与订单</h1>
-              <p class="payment-hero-lede">月付 9.9 元 · 年付 99.99 元</p>
+              <p class="payment-hero-lede" data-plan-summary>月付 9.9 元 · 年付 99.99 元</p>
             </div>
             <span class="payment-hero-note">订单流程 / 03</span>
           </div>
@@ -67,13 +67,13 @@
                 <div class="plan-options" role="radiogroup" aria-label="选择订阅方案">
                   <button class="plan-option is-selected" type="button" data-plan="monthly" aria-pressed="true">
                     <span class="plan-option-radio" aria-hidden="true"></span>
-                    <span class="plan-option-copy"><strong>月付</strong><small>按月订阅</small></span>
-                    <span class="plan-option-price">9.9<small>元 / 月</small></span>
+                    <span class="plan-option-copy"><strong data-option-name>月付订阅</strong><small data-option-description>一个自然月</small></span>
+                    <span class="plan-option-price"><span data-option-price>9.9</span><small data-option-unit>元 / 月</small></span>
                   </button>
                   <button class="plan-option" type="button" data-plan="annual" aria-pressed="false">
                     <span class="plan-option-radio" aria-hidden="true"></span>
-                    <span class="plan-option-copy"><strong>年付</strong><small>按年订阅</small></span>
-                    <span class="plan-option-price">99.99<small>元 / 年</small></span>
+                    <span class="plan-option-copy"><strong data-option-name>年付订阅</strong><small data-option-description>一个自然年</small></span>
+                    <span class="plan-option-price"><span data-option-price>99.99</span><small data-option-unit>元 / 年</small></span>
                   </button>
                 </div>
 
@@ -129,6 +129,7 @@
               </div>
               <div class="order-result-actions">
                 <button class="button button-primary" type="button" data-pay-button>前往支付宝支付 <span aria-hidden="true">→</span></button>
+                <button class="button button-secondary" type="button" data-refresh-payment hidden>刷新支付结果</button>
                 <button class="button button-secondary" type="button" data-reset-order>重新提交</button>
               </div>
               <p class="payment-feedback" data-payment-feedback role="alert" tabindex="-1"></p>
@@ -143,7 +144,7 @@
             </div>
             <div class="summary-lines">
               <div class="summary-line"><span>订阅周期</span><strong data-summary-cycle>每月</strong></div>
-              <div class="summary-line"><span>支付方式</span><strong data-summary-payment>支付宝沙箱</strong></div>
+              <div class="summary-line"><span>支付方式</span><strong data-summary-payment>支付宝</strong></div>
             </div>
             <div class="summary-total"><span>应付金额</span><strong data-summary-price>¥ 9.9</strong></div>
 

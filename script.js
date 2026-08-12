@@ -40,6 +40,45 @@
   );
   sections.forEach((section) => observer.observe(section));
 
+  const formatPlanPrice = (fen) => {
+    const fixed = (Number(fen) / 100).toFixed(2);
+    return fixed.replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  };
+
+  const loadSubscriptionPlans = async () => {
+    try {
+      const response = await fetch('/api/subscription/plans', { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok || payload.ok === false || !payload.plans?.plans) return;
+      const config = payload.plans;
+      config.plans.forEach((plan) => {
+        const card = document.querySelector('[data-subscription-card="' + plan.id + '"]');
+        if (!card) return;
+        const unit = plan.periodUnit === 'year' ? '元 / 年' : '元 / 月';
+        const available = config.salesEnabled && plan.enabled;
+        card.querySelector('[data-plan-name]').textContent = plan.name;
+        card.querySelector('[data-plan-price]').textContent = formatPlanPrice(plan.priceFen);
+        card.querySelector('[data-plan-unit]').textContent = unit;
+        card.querySelector('[data-plan-description]').textContent = plan.description;
+        card.querySelector('[data-plan-status]').textContent = available ? '可订阅' : '暂不可用';
+        card.classList.toggle('price-card-featured', Boolean(plan.recommended && plan.enabled));
+        const link = card.querySelector('.subscription-button');
+        link.setAttribute('aria-disabled', String(!available));
+        link.tabIndex = available ? 0 : -1;
+      });
+      const visible = config.plans.filter((plan) => plan.enabled);
+      const summary = document.querySelector('[data-subscription-summary]');
+      if (summary && visible.length) {
+        summary.textContent = visible.map((plan) => (
+          plan.name + ' ' + formatPlanPrice(plan.priceFen) + ' 元'
+        )).join('，') + '。';
+      }
+    } catch {
+      // 保留页面中的静态默认套餐。
+    }
+  };
+
+  void loadSubscriptionPlans();
   document.querySelectorAll('.product-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.product-tab').forEach((item) => {

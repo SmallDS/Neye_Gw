@@ -236,23 +236,23 @@
           <div class="subscription-intro">
             <p class="eyebrow eyebrow-dark">订阅方案</p>
             <h2 id="subscription-title">订阅方案</h2>
-            <p>月付 9.9 元，年付 99.99 元。</p>
+            <p data-subscription-summary>月付 9.9 元，年付 99.99 元。</p>
           </div>
           <div class="pricing-grid">
-            <article class="price-card">
+            <article class="price-card" data-subscription-card="monthly">
               <div class="price-card-top">
-                <div><p class="price-label">月付</p><h3><span class="price-number">9.9</span><span class="price-unit">元 / 月</span></h3></div>
-                <span class="price-status">预留</span>
+                <div><p class="price-label" data-plan-name>月付订阅</p><h3><span class="price-number" data-plan-price>9.9</span><span class="price-unit" data-plan-unit>元 / 月</span></h3></div>
+                <span class="price-status" data-plan-status>可订阅</span>
               </div>
-              <p class="price-note">月度订阅方案</p>
+              <p class="price-note" data-plan-description>一个自然月的 NEye 订阅服务</p>
               <a class="subscription-button" href="./payment.html?plan=monthly" data-plan="monthly">立即订阅 <span aria-hidden="true">→</span></a>
             </article>
-            <article class="price-card price-card-featured">
+            <article class="price-card price-card-featured" data-subscription-card="annual">
               <div class="price-card-top">
-                <div><p class="price-label">年付</p><h3><span class="price-number">99.99</span><span class="price-unit">元 / 年</span></h3></div>
-                <span class="price-status">预留</span>
+                <div><p class="price-label" data-plan-name>年付订阅</p><h3><span class="price-number" data-plan-price>99.99</span><span class="price-unit" data-plan-unit>元 / 年</span></h3></div>
+                <span class="price-status" data-plan-status>可订阅</span>
               </div>
-              <p class="price-note">年度订阅方案</p>
+              <p class="price-note" data-plan-description>一个自然年的 NEye 订阅服务</p>
               <a class="subscription-button" href="./payment.html?plan=annual" data-plan="annual">立即订阅 <span aria-hidden="true">→</span></a>
             </article>
           </div>

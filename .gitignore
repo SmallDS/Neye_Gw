@@ -12,3 +12,4 @@ Thumbs.db
 # Secrets
 .env
 .env.*
+/.alipay-sandbox.json
