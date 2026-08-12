@@ -266,33 +266,42 @@ export function decryptJson(payload, secret, context) {
   }
 }
 
+function asArrayBuffer(value) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
 export async function encryptJsonAsync(value, secret, context) {
   const subtle = globalThis.crypto?.subtle;
   if (!subtle) return encryptJson(value, secret, context);
   try {
-    const iv = randomBytes(12);
+    const iv = new Uint8Array(randomBytes(12));
     const key = await subtle.importKey(
       'raw',
-      deriveKey(secret, 'aes-gcm'),
+      asArrayBuffer(deriveKey(secret, 'aes-gcm')),
       { name: 'AES-GCM' },
       false,
       ['encrypt'],
     );
-    const encrypted = Buffer.from(await subtle.encrypt(
+    const encrypted = new Uint8Array(await subtle.encrypt(
       {
         name: 'AES-GCM',
-        iv,
-        additionalData: Buffer.from(String(context), 'utf8'),
+        iv: asArrayBuffer(iv),
+        additionalData: asArrayBuffer(Buffer.from(String(context), 'utf8')),
         tagLength: 128,
       },
       key,
-      Buffer.from(JSON.stringify(value), 'utf8'),
+      asArrayBuffer(Buffer.from(JSON.stringify(value), 'utf8')),
     ));
-    const tag = encrypted.subarray(encrypted.length - 16);
-    const ciphertext = encrypted.subarray(0, encrypted.length - 16);
+    const tag = encrypted.slice(encrypted.length - 16);
+    const ciphertext = encrypted.slice(0, encrypted.length - 16);
     return ['v2', toBase64Url(iv), toBase64Url(tag), toBase64Url(ciphertext)].join('.');
   } catch {
-    throw new AppError(503, 'ENCRYPTED_DATA_UNAVAILABLE', '加密服务暂时不可用。');
+    try {
+      return encryptJson(value, secret, context);
+    } catch {
+      throw new AppError(503, 'ENCRYPTED_DATA_UNAVAILABLE', '加密服务暂时不可用。');
+    }
   }
 }
 
@@ -307,7 +316,7 @@ export async function decryptJsonAsync(payload, secret, context) {
   try {
     const key = await subtle.importKey(
       'raw',
-      deriveKey(secret, 'aes-gcm'),
+      asArrayBuffer(deriveKey(secret, 'aes-gcm')),
       { name: 'AES-GCM' },
       false,
       ['decrypt'],
@@ -316,12 +325,12 @@ export async function decryptJsonAsync(payload, secret, context) {
     const plaintext = await subtle.decrypt(
       {
         name: 'AES-GCM',
-        iv: fromBase64Url(parts[1]),
-        additionalData: Buffer.from(String(context), 'utf8'),
+        iv: asArrayBuffer(fromBase64Url(parts[1])),
+        additionalData: asArrayBuffer(Buffer.from(String(context), 'utf8')),
         tagLength: 128,
       },
       key,
-      combined,
+      asArrayBuffer(combined),
     );
     return JSON.parse(Buffer.from(plaintext).toString('utf8'));
   } catch {
