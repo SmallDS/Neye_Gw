@@ -197,13 +197,14 @@ export async function getAuthState(store, config) {
   };
 }
 
-export async function getAuthRuntimeHealth(store, config) {
+export async function getAuthRuntimeHealth(store, config, request) {
   const health = {
     runtimeVersion: RUNTIME_VERSION,
     cryptoReady: false,
     envelopeVersion: '',
     storageWriteReady: false,
     storageDeleteReady: false,
+    setupFlowReady: false,
     stage: '',
   };
   if (!config.adminDataKey) {
@@ -237,6 +238,27 @@ export async function getAuthRuntimeHealth(store, config) {
     health.storageDeleteReady = true;
   } catch {
     health.stage = 'storage_delete';
+    return health;
+  }
+  let challengeId = '';
+  try {
+    const challenge = await startChallenge(store, config, request, {
+      token: config.adminSetupToken,
+    }, 'setup');
+    challengeId = challenge.challengeId;
+    JSON.stringify({ challenge });
+    health.setupFlowReady = true;
+  } catch (error) {
+    health.stage = isAppError(error) ? error.details?.stage || error.code : 'setup_flow';
+  } finally {
+    if (challengeId) {
+      try {
+        await store.delete(challengeKey(challengeId));
+      } catch {
+        health.setupFlowReady = false;
+        health.stage = 'setup_probe_cleanup';
+      }
+    }
   }
   return health;
 }

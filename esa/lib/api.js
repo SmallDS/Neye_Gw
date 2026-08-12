@@ -411,7 +411,7 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
   if (path === '/api/admin/auth/health') {
     assertMethod(request, 'GET');
     return jsonSuccess(request, rootConfig, requestId, {
-      health: await getAuthRuntimeHealth(store, rootConfig),
+      health: await getAuthRuntimeHealth(store, rootConfig, request),
     });
   }
   if (path === '/api/admin/auth/setup/start') {
