@@ -13,7 +13,6 @@ import {
   parseCookies,
   randomId,
   requireAdminConfig,
-  RUNTIME_VERSION,
 } from './core.js';
 
 const ADMIN_AUTH_KEY = 'v2_admin_auth';
@@ -195,72 +194,6 @@ export async function getAuthState(store, config) {
     setupAvailable: Boolean(config.adminSetupToken && config.adminDataKey && config.adminSessionSecret),
     resetAvailable: Boolean(config.adminResetToken && config.adminDataKey && config.adminSessionSecret),
   };
-}
-
-export async function getAuthRuntimeHealth(store, config, request) {
-  const health = {
-    runtimeVersion: RUNTIME_VERSION,
-    cryptoReady: false,
-    envelopeVersion: '',
-    storageWriteReady: false,
-    storageDeleteReady: false,
-    setupFlowReady: false,
-    stage: '',
-  };
-  if (!config.adminDataKey) {
-    health.stage = 'data_key_missing';
-    return health;
-  }
-  try {
-    const context = 'v2_admin_runtime_health';
-    const encrypted = await encryptJsonAsync({ value: 'ready' }, config.adminDataKey, context);
-    const decrypted = await decryptJsonAsync(encrypted, config.adminDataKey, context);
-    health.cryptoReady = decrypted?.value === 'ready';
-    health.envelopeVersion = String(encrypted).split('.')[0] || '';
-    if (!health.cryptoReady) health.stage = 'crypto_round_trip';
-  } catch (error) {
-    health.stage = isAppError(error) ? error.code : 'crypto_runtime';
-    return health;
-  }
-  const probeKey = 'v2_admin_runtime_health_probe';
-  try {
-    await store.putJson(probeKey, {
-      runtimeVersion: RUNTIME_VERSION,
-      checkedAt: new Date().toISOString(),
-    });
-    health.storageWriteReady = true;
-  } catch {
-    health.stage = 'storage_write';
-    return health;
-  }
-  try {
-    await store.delete(probeKey);
-    health.storageDeleteReady = true;
-  } catch {
-    health.stage = 'storage_delete';
-    return health;
-  }
-  let challengeId = '';
-  try {
-    const challenge = await startChallenge(store, config, request, {
-      token: config.adminSetupToken,
-    }, 'setup');
-    challengeId = challenge.challengeId;
-    JSON.stringify({ challenge });
-    health.setupFlowReady = true;
-  } catch (error) {
-    health.stage = isAppError(error) ? error.details?.stage || error.code : 'setup_flow';
-  } finally {
-    if (challengeId) {
-      try {
-        await store.delete(challengeKey(challengeId));
-      } catch {
-        health.setupFlowReady = false;
-        health.stage = 'setup_probe_cleanup';
-      }
-    }
-  }
-  return health;
 }
 
 function setupFailure(stage, error) {

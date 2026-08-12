@@ -335,25 +335,21 @@ test('ESA Edge KV 可为请求函数提供后台安全配置', async function ()
     else globalThis.EdgeKV = previous;
   }
 });
-test('后台认证运行时自检只返回安全状态和部署版本', async function () {
-  const response = await routeRequest(request('/api/admin/auth/health'), {
+test('后台认证状态接口返回部署版本且不泄露安全配置', async function () {
+  const response = await routeRequest(request('/api/admin/auth/state'), {
     store: new MemoryStore(),
     config: testConfig(),
-    requestId: 'REQ_AUTH_HEALTH',
+    requestId: 'REQ_AUTH_STATE',
   });
   const body = await payload(response);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('x-neye-runtime-version'), RUNTIME_VERSION);
-  assert.deepEqual(body.health, {
-    runtimeVersion: RUNTIME_VERSION,
-    cryptoReady: true,
-    envelopeVersion: 'v4',
-    storageWriteReady: true,
-    storageDeleteReady: true,
-    setupFlowReady: true,
-    stage: '',
+  assert.deepEqual(body.auth, {
+    configured: false,
+    setupAvailable: true,
+    resetAvailable: true,
   });
-  assert.equal(JSON.stringify(body).includes('portable-test-key'), false);
+  assert.equal(JSON.stringify(body).includes('setup-token-for-tests'), false);
 });
 test('支付宝请求签名包含 sign_type，响应验签覆盖原始 JSON', function () {
   const params = {

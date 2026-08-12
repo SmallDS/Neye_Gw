@@ -21,7 +21,6 @@ import {
   clearSessionCookies,
   confirmReset,
   confirmSetup,
-  getAuthRuntimeHealth,
   getAuthState,
   login,
   requireAdminSession,
@@ -407,12 +406,6 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
   if (path === '/api/admin/auth/state') {
     assertMethod(request, 'GET');
     return jsonSuccess(request, rootConfig, requestId, { auth: await getAuthState(store, rootConfig) });
-  }
-  if (path === '/api/admin/auth/health') {
-    assertMethod(request, 'GET');
-    return jsonSuccess(request, rootConfig, requestId, {
-      health: await getAuthRuntimeHealth(store, rootConfig, request),
-    });
   }
   if (path === '/api/admin/auth/setup/start') {
     assertMethod(request, 'POST');
