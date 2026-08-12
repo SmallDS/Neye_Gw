@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0052d9" />
+    <meta name="description" content="NEye 为眼镜店提供客户、验光单、配镜单与取镜通知一体化工作台。" />
+    <title>NEye｜让每一张验光单，成为下一次服务的起点</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./script.js" defer></script>
+  </head>
+  <body>
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <header class="site-header" data-header>
+      <div class="container header-inner">
+        <a class="brand" href="#top" aria-label="NEye 官网首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 36 36" role="presentation">
+              <path d="M9 27V9l18 18V9" />
+              <path class="brand-mark-cut" d="M9 9l18 18" />
+            </svg>
+          </span>
+          <span class="brand-copy"><strong>NEye</strong><span>验配工作台</span></span>
+        </a>
+
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-menu-toggle>
+          <span class="sr-only" data-menu-label>打开导航</span><span class="menu-line"></span><span class="menu-line"></span>
+        </button>
+
+        <nav class="site-nav" id="site-nav" aria-label="主导航" data-nav>
+          <a href="#product">产品能力</a>
+          <a href="#workflow">工作流</a>
+          <a href="#for-teams">适合谁</a>
+          <a href="#faq">常见问题</a>
+          <a class="nav-cta" href="#product">看产品如何工作 <span aria-hidden="true">↗</span></a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-grid" aria-hidden="true"></div>
+        <div class="container hero-layout">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="eyebrow-dot"></span>面向眼镜店的一套客户与验配工作台</p>
+            <h1 id="hero-title">让每一张验光单，成为下一次服务的起点。</h1>
+            <p class="hero-lede">NEye 把客户档案、验光数据、配镜记录和取镜通知，放回同一个清晰的工作区。让店员查得快、录得准，也能在下一次服务时接住上一次记录。</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#product">查看产品能力 <span aria-hidden="true">↗</span></a>
+              <a class="text-link" href="#workflow">从一条客户记录开始 <span aria-hidden="true">↓</span></a>
+            </div>
+            <div class="hero-note"><span class="note-mark" aria-hidden="true">N</span><span>Web 管理端 × 微信小程序</span><span class="note-separator" aria-hidden="true"></span><span>数据按门店隔离</span></div>
+          </div>
+
+          <div class="hero-product" aria-label="NEye 客户工作区演示界面，使用合成数据">
+            <div class="product-chrome">
+              <div class="chrome-brand"><span class="chrome-mark">N</span> NEye <span class="chrome-slash">/</span> 客户工作区</div>
+              <div class="chrome-tools"><span class="chrome-status"><span class="status-dot"></span>已保存</span><span class="avatar">晴</span></div>
+            </div>
+            <div class="product-bar">
+              <div><p class="surface-kicker">当前客户</p><h2>李晴 <span>NE-240318</span></h2></div>
+              <div class="product-tabs" role="tablist" aria-label="客户工作区标签">
+                <button class="product-tab is-active" type="button" role="tab" aria-selected="true">概览</button>
+                <button class="product-tab" type="button" role="tab" aria-selected="false">验光单 <span>3</span></button>
+                <button class="product-tab" type="button" role="tab" aria-selected="false">配镜单 <span>1</span></button>
+              </div>
+            </div>
+            <div class="product-content">
+              <aside class="customer-rail">
+                <div class="customer-initials">李晴</div>
+                <div class="customer-name">李晴</div>
+                <div class="customer-meta">女 · 28 岁</div>
+                <div class="rail-divider"></div>
+                <dl class="customer-facts">
+                  <div><dt>手机号</dt><dd>138 **** 4721</dd></div>
+                  <div><dt>最近到店</dt><dd>2026.03.18</dd></div>
+                  <div><dt>历史验光</dt><dd>3 份记录</dd></div>
+                </dl>
+                <div class="rail-bottom"><span class="mini-check">✓</span> 档案已同步</div>
+              </aside>
+              <div class="workbench">
+                <div class="workbench-heading"><div><span class="section-label">最近一份验光单</span><h3>2026.03.18 · 日常佩戴</h3></div><span class="record-tag">已完成</span></div>
+                <div class="prescription-table-wrap">
+                  <table class="prescription-table"><caption class="sr-only">李晴最近一份验光单（合成数据）</caption>
+                    <thead><tr><th>项目</th><th>右眼 OD</th><th>左眼 OS</th></tr></thead>
+                    <tbody>
+                      <tr><th scope="row">球镜 SPH</th><td>-2.25</td><td>-2.00</td></tr>
+                      <tr><th scope="row">柱镜 CYL</th><td>-0.50</td><td>-0.25</td></tr>
+                      <tr><th scope="row">轴位 AXIS</th><td>180°</td><td>175°</td></tr>
+                      <tr class="focus-row"><th scope="row">矫正视力</th><td>1.0</td><td>1.0</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="workbench-foot"><span><span class="foot-icon">⌁</span> 历史文本原样保留</span><button type="button" class="inline-action">查看完整记录 <span aria-hidden="true">→</span></button></div>
+              </div>
+              <aside class="order-rail">
+                <div class="order-head"><span class="section-label">配镜单</span><span class="order-id">FIT-260318</span></div>
+                <div class="order-product">日常通勤镜</div>
+                <div class="order-status"><span class="status-ring"></span><strong>制作中</strong></div>
+                <div class="order-rule"></div>
+                <div class="order-detail"><span>镜架</span><strong>TR90 · 黑色</strong></div>
+                <div class="order-detail"><span>镜片</span><strong>1.60 防蓝光</strong></div>
+                <div class="pickup-state"><span class="wechat-dot">⌁</span><div><strong>取镜通知</strong><small>待顾客授权</small></div></div>
+              </aside>
+            </div>
+            <div class="synthetic-label"><span class="synthetic-dot"></span>演示界面 · 合成数据</div>
+          </div>
+        </div>
+        <div class="hero-side-note" aria-hidden="true">01 / CONTEXT FIRST</div>
+      </section>
+
+      <section class="signal-strip" aria-label="NEye 核心流程">
+        <div class="container signal-inner"><span class="signal-label">一条连续记录</span><div class="signal-track"><span>客户档案</span><i aria-hidden="true">→</i><span>验光数据</span><i aria-hidden="true">→</i><span>配镜记录</span><i aria-hidden="true">→</i><span>取镜通知</span></div><span class="signal-label signal-label-right">从柜台到手机</span></div>
+      </section>
+      <section class="section product-section" id="product" aria-labelledby="product-title">
+        <div class="container">
+          <div class="section-heading split-heading">
+            <div><p class="eyebrow eyebrow-dark">把上下文留在现场</p><h2 id="product-title">少一步切换，多一段完整上下文。</h2></div>
+            <p class="section-intro">从客户搜索到取镜通知，NEye 只围绕眼镜店每天真正反复发生的动作，把信息放在该出现的地方。</p>
+          </div>
+
+          <div class="capability-list">
+            <article class="capability-row">
+              <div class="capability-index">A<span>01</span></div>
+              <div class="capability-copy"><p class="capability-kicker">客户工作区</p><h3>先找到人，再接住他的历史。</h3><p>支持姓名、拼音首字母、手机号和客户编号查询。客户档案、历次验光和关联配镜单在同一个上下文里展开。</p><a class="row-link" href="#workflow">了解客户工作区 <span aria-hidden="true">↗</span></a></div>
+              <div class="capability-visual customer-visual" aria-hidden="true">
+                <div class="search-line"><span class="search-icon">⌕</span><span>姓名 / 拼音 / 手机号</span><span class="search-enter">Enter</span></div>
+                <div class="search-results">
+                  <div class="result-row is-selected"><span class="result-avatar">李</span><span><strong>李晴</strong><small>NE-240318 · 138 **** 4721</small></span><b>→</b></div>
+                  <div class="result-row"><span class="result-avatar result-avatar-muted">陈</span><span><strong>陈嘉</strong><small>NE-240217 · 135 **** 0914</small></span><b>→</b></div>
+                  <div class="result-row"><span class="result-avatar result-avatar-muted">周</span><span><strong>周明</strong><small>NE-231204 · 139 **** 8102</small></span><b>→</b></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="capability-row capability-row-reverse">
+              <div class="capability-index">B<span>02</span></div>
+              <div class="capability-copy"><p class="capability-kicker">验光记录</p><h3>真实文本优先，记录不必被迫变形。</h3><p>验光数据按文本保存，适应历史纸单、表格和不统一的书写习惯；同时保留清晰的左右眼结构，方便核对和回看。</p><a class="row-link" href="#workflow">看看验光记录如何流动 <span aria-hidden="true">↗</span></a></div>
+              <div class="capability-visual rx-visual" aria-hidden="true">
+                <div class="rx-topline"><span>验光单 / OPT-260318</span><span>日常佩戴</span></div>
+                <div class="rx-grid">
+                  <div class="rx-cell rx-label"></div><div class="rx-cell rx-eye">右眼 OD</div><div class="rx-cell rx-eye">左眼 OS</div>
+                  <div class="rx-cell rx-label">球镜 SPH</div><div class="rx-cell">-2.25</div><div class="rx-cell">-2.00</div>
+                  <div class="rx-cell rx-label">柱镜 CYL</div><div class="rx-cell">-0.50</div><div class="rx-cell">-0.25</div>
+                  <div class="rx-cell rx-label">轴位 AXIS</div><div class="rx-cell">180°</div><div class="rx-cell">175°</div>
+                </div>
+                <div class="rx-note"><span>备注</span><strong>夜间驾驶，优先考虑抗反射</strong></div>
+              </div>
+            </article>
+
+            <article class="capability-row">
+              <div class="capability-index">C<span>03</span></div>
+              <div class="capability-copy"><p class="capability-kicker">配镜与取镜</p><h3>从“制作中”到“可以取”，状态有下一步。</h3><p>配镜单承接验光结果，制作进度与取镜通知保持在同一条业务链上；顾客主动授权后，微信通知自然接入。</p><a class="row-link" href="#workflow">查看配镜闭环 <span aria-hidden="true">↗</span></a></div>
+              <div class="capability-visual status-visual" aria-hidden="true">
+                <div class="status-head"><span>FIT-260318</span><span class="status-badge">制作中</span></div>
+                <div class="status-timeline">
+                  <div class="timeline-step is-done"><span>✓</span><div><strong>已下单</strong><small>03.18 14:26</small></div></div>
+                  <div class="timeline-step is-current"><span>2</span><div><strong>制作中</strong><small>等待加工完成</small></div></div>
+                  <div class="timeline-step"><span>3</span><div><strong>待取镜</strong><small>授权后发送微信通知</small></div></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow-section" id="workflow" aria-labelledby="workflow-title">
+        <div class="container workflow-layout">
+          <div class="workflow-copy">
+            <p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span>一条记录，四个现场</p>
+            <h2 id="workflow-title">让信息沿着服务走，不要让店员追着信息跑。</h2>
+            <p>每个环节都有明确的承接关系：找到客户，打开历史，完成验光，创建配镜，最后把“可以取了”交给合适的人。</p>
+            <a class="button button-light" href="#for-teams">看看谁在使用它 <span aria-hidden="true">↗</span></a>
+          </div>
+
+          <div class="workflow-sheet">
+            <div class="workflow-sheet-head"><span>NEYE / SERVICE FLOW</span><span>ACTIVE RECORD / 李晴</span></div>
+            <div class="flow-node is-past"><span class="flow-badge">01</span><div><strong>找到客户</strong><small>姓名 · 拼音 · 手机号 · 编号</small></div><span class="flow-check">✓</span></div>
+            <div class="flow-connector"><span></span></div>
+            <div class="flow-node is-past"><span class="flow-badge">02</span><div><strong>记录验光</strong><small>左右眼结构 · 文本原貌 · 历史回看</small></div><span class="flow-check">✓</span></div>
+            <div class="flow-connector"><span></span></div>
+            <div class="flow-node is-current"><span class="flow-badge">03</span><div><strong>创建配镜单</strong><small>镜架 · 镜片 · 金额 · 制作状态</small></div><span class="flow-arrow">→</span></div>
+            <div class="flow-connector"><span></span></div>
+            <div class="flow-node"><span class="flow-badge">04</span><div><strong>通知取镜</strong><small>顾客主动授权后发送微信通知</small></div><span class="flow-tail">○</span></div>
+            <div class="flow-caption"><span class="pulse-dot"></span>当前记录停在制作中，下一步清楚可见</div>
+          </div>
+        </div>
+      </section>
+      <section class="section teams-section" id="for-teams" aria-labelledby="teams-title">
+        <div class="container">
+          <div class="section-heading narrow-heading">
+            <p class="eyebrow eyebrow-dark">一套系统，两种节奏</p>
+            <h2 id="teams-title">柜台要快，后台要稳。</h2>
+            <p>NEye 让 Web 管理端和微信小程序各自服务最合适的场景，同时保持同一套客户、验光和配镜数据。</p>
+          </div>
+          <div class="team-columns">
+            <article class="team-column"><div class="team-symbol" aria-hidden="true">⌘</div><div><p class="team-kicker">给一线店员</p><h3>在柜台，少切一步。</h3><ul class="plain-list"><li><span>01</span>姓名、拼音、手机号快速定位客户</li><li><span>02</span>在客户工作区连续处理验光与配镜</li><li><span>03</span>用小程序在移动场景快速建档和查询</li></ul></div></article>
+            <article class="team-column"><div class="team-symbol team-symbol-admin" aria-hidden="true">⌗</div><div><p class="team-kicker">给系统管理员</p><h3>在后台，把边界管清。</h3><ul class="plain-list"><li><span>01</span>管理租户、账号与成员关系</li><li><span>02</span>导入历史数据，查看进度与错误日志</li><li><span>03</span>配置验光单样式与微信能力</li></ul></div></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="scope-section" aria-labelledby="scope-title">
+        <div class="container scope-layout">
+          <div><p class="eyebrow eyebrow-dark">产品边界</p><h2 id="scope-title">只把关键流程做深。</h2><p>NEye 专注于客户与验配档案，不把门店日常变成一套复杂 ERP。清楚的边界，才能让真正高频的流程保持轻。</p></div>
+          <div class="scope-ledger">
+            <div class="ledger-row ledger-in"><span class="ledger-mark">+</span><span>客户 / 验光单 / 配镜单 / 取镜通知</span><small>当前聚焦</small></div>
+            <div class="ledger-row ledger-in"><span class="ledger-mark">+</span><span>多租户隔离 / 历史文本兼容 / 数据导入</span><small>系统能力</small></div>
+            <div class="ledger-row ledger-out"><span class="ledger-mark">—</span><span>库存 / 采购 / 门店收银 / 顾客支付 / 财务报表</span><small>明确不做</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section subscription-section" id="subscription" aria-labelledby="subscription-title">
+        <div class="container subscription-layout">
+          <div class="subscription-intro">
+            <p class="eyebrow eyebrow-dark">订阅方案</p>
+            <h2 id="subscription-title">简单订阅，支付入口预留中。</h2>
+            <p>月付 9.9 元，年付 99.99 元。</p>
+          </div>
+          <div class="pricing-grid">
+            <article class="price-card">
+              <div class="price-card-top">
+                <div><p class="price-label">月付</p><h3><span class="price-number">9.9</span><span class="price-unit">元 / 月</span></h3></div>
+                <span class="price-status">预留</span>
+              </div>
+              <p class="price-note">月度订阅方案</p>
+              <button class="subscription-button" type="button" disabled data-plan="monthly">支付入口预留</button>
+            </article>
+            <article class="price-card price-card-featured">
+              <div class="price-card-top">
+                <div><p class="price-label">年付</p><h3><span class="price-number">99.99</span><span class="price-unit">元 / 年</span></h3></div>
+                <span class="price-status">预留</span>
+              </div>
+              <p class="price-note">年度订阅方案</p>
+              <button class="subscription-button" type="button" disabled data-plan="annual">支付入口预留</button>
+            </article>
+          </div>
+        </div>
+      </section>
+      <section class="section faq-section" id="faq" aria-labelledby="faq-title">
+        <div class="container faq-layout">
+          <div class="faq-intro"><p class="eyebrow eyebrow-dark">常见问题</p><h2 id="faq-title">先把最重要的事说清楚。</h2><p>产品边界、数据形态和使用场景，都应该在开始之前被看见。</p></div>
+          <div class="faq-list">
+            <details class="faq-item" open><summary>NEye 适合哪些门店？<span aria-hidden="true"></span></summary><div class="faq-answer">NEye 面向需要持续维护客户、验光与配镜记录的眼镜店，重点服务柜台连续录入和历史查询。系统暂不扩展为库存、收银或采购系统。</div></details>
+            <details class="faq-item"><summary>验光数据必须是标准数值吗？<span aria-hidden="true"></span></summary><div class="faq-answer">不必。验光数据按文本保存，兼容纸质记录、既有表格和不统一的历史书写；同时用清晰的结构帮助店员快速核对。</div></details>
+            <details class="faq-item"><summary>Web 管理端和微信小程序是什么关系？<span aria-hidden="true"></span></summary><div class="faq-answer">Web 管理端适合柜台连续操作、全局查询和系统管理；微信小程序适合移动场景下的建档、验光录入与查询。两端使用同一套业务数据与门店边界。</div></details>
+            <details class="faq-item"><summary>取镜通知如何触发？<span aria-hidden="true"></span></summary><div class="faq-answer">店员在配镜单中标记眼镜可取后，顾客需要主动授权，系统才会通过微信发送一次性取镜通知。</div></details>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing-section" aria-labelledby="closing-title">
+        <div class="container closing-layout"><div><p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span>从一位客户开始</p><h2 id="closing-title">让下一次服务，接得住上一次记录。</h2></div><div class="closing-action"><p>看见产品如何工作，再决定它是否适合你的门店。</p><a class="button button-light" href="#top">回到产品首页 <span aria-hidden="true">↑</span></a></div></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner"><div class="footer-brand"><span class="brand-mark brand-mark-small" aria-hidden="true"><svg viewBox="0 0 36 36" role="presentation"><path d="M9 27V9l18 18V9" /><path class="brand-mark-cut" d="M9 9l18 18" /></svg></span><span><strong>NEye</strong><small>客户与验配工作台</small></span></div><p>客户、验光单、配镜单，一处管理。</p><span class="footer-year">© 2026 NEye</span></div>
+    </footer>
+  </body>
+</html>
