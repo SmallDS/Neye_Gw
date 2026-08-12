@@ -19,14 +19,10 @@ import {
 } from './core.js';
 import {
   clearSessionCookies,
-  confirmReset,
-  confirmSetup,
   getAuthState,
   login,
   requireAdminSession,
-  startReset,
-  startSetup,
-  verifySensitiveTotp,
+  verifySensitivePassword,
 } from './auth.js';
 import {
   buildPaymentFields,
@@ -407,52 +403,6 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
     assertMethod(request, 'GET');
     return jsonSuccess(request, rootConfig, requestId, { auth: await getAuthState(store, rootConfig) });
   }
-  if (path === '/api/admin/auth/setup/start') {
-    assertMethod(request, 'POST');
-    let result;
-    try {
-      result = await startSetup(store, rootConfig, request, await parseJsonBody(request));
-    } catch (error) {
-      if (isAppError(error)) throw error;
-      throw new AppError(503, 'ADMIN_SETUP_STAGE_FAILED', '管理后台初始化暂时不可用。', {
-        stage: 'setup_route',
-      });
-    }
-    return jsonSuccess(request, rootConfig, requestId, { challenge: result }, 201);
-  }
-  if (path === '/api/admin/auth/setup/confirm') {
-    assertMethod(request, 'POST');
-    const session = await confirmSetup(store, rootConfig, request, await parseJsonBody(request));
-    await recordAudit(store, {
-      action: 'admin.totp.setup',
-      targetType: 'admin',
-      targetId: 'primary',
-      result: 'succeeded',
-      requestId,
-    });
-    return jsonSuccess(request, rootConfig, requestId, {
-      session: { expiresAt: session.session.expiresAt * 1000, csrfToken: session.csrfToken },
-    }, 200, { 'Set-Cookie': session.cookies });
-  }
-  if (path === '/api/admin/auth/reset/start') {
-    assertMethod(request, 'POST');
-    const result = await startReset(store, rootConfig, request, await parseJsonBody(request));
-    return jsonSuccess(request, rootConfig, requestId, { challenge: result }, 201);
-  }
-  if (path === '/api/admin/auth/reset/confirm') {
-    assertMethod(request, 'POST');
-    const session = await confirmReset(store, rootConfig, request, await parseJsonBody(request));
-    await recordAudit(store, {
-      action: 'admin.totp.reset',
-      targetType: 'admin',
-      targetId: 'primary',
-      result: 'succeeded',
-      requestId,
-    });
-    return jsonSuccess(request, rootConfig, requestId, {
-      session: { expiresAt: session.session.expiresAt * 1000, csrfToken: session.csrfToken },
-    }, 200, { 'Set-Cookie': session.cookies });
-  }
   if (path === '/api/admin/auth/login') {
     assertMethod(request, 'POST');
     const session = await login(store, rootConfig, request, await parseJsonBody(request));
@@ -522,7 +472,7 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
       store,
       rootConfig,
       input,
-      () => verifySensitiveTotp(store, rootConfig, request, input.totpCode)
+      () => verifySensitivePassword(store, rootConfig, request, input.adminPassword)
     ));
     return jsonSuccess(request, result.effectiveConfig, requestId, {
       paymentConfig: result.paymentConfig,

@@ -151,24 +151,23 @@ function json(response, status = 200) {
 function apiResponse(request) {
   const url = new URL(request.url, 'http://127.0.0.1:' + port);
   const path = url.pathname;
-  const previewSetup = String(request.headers.cookie || '').includes('preview_auth=setup');
+  const previewMode = (String(request.headers.cookie || '').match(/preview_auth=([^;]+)/) || [])[1] || '';
   if (path === '/api/admin/auth/state') {
     return json({
-      auth: previewSetup
-        ? { configured: false, setupAvailable: true, resetAvailable: true }
-        : { configured: true, setupAvailable: true, resetAvailable: true },
+      auth: {
+        mode: 'password',
+        configured: previewMode !== 'missing',
+        loginAvailable: previewMode !== 'missing',
+      },
     });
   }
-  if (path === '/api/admin/auth/setup/start') {
-    return json({
-      challenge: {
-        challengeId: 'ABCDEF1234567890ABCDEF12',
-        secret: 'JBSWY3DPEHPK3PXP',
-        otpauthUri: 'otpauth://totp/NEye%20%E5%AE%98%E7%BD%91%3Aadmin%40smallds.icu?secret=JBSWY3DPEHPK3PXP&issuer=NEye%20%E5%AE%98%E7%BD%91&algorithm=SHA1&digits=6&period=30',
-        expiresAt: new Date(now.getTime() + 600000).toISOString(),
-      },
-    }, 201);
-  }  if (path === '/api/admin/session') {
+  if (path === '/api/admin/auth/login') {
+    return json({ session: { version: 'preview', expiresAt: new Date(now.getTime() + 28800000).toISOString(), csrfToken: 'preview-csrf' } });
+  }
+  if (path === '/api/admin/session') {
+    if (previewMode === 'login' || previewMode === 'missing') {
+      return json({ ok: false, error: { code: 'ADMIN_AUTH_REQUIRED', message: '请登录。' } }, 401);
+    }
     return json({ session: { version: 1, expiresAt: new Date(now.getTime() + 28800000).toISOString(), csrfToken: 'preview-csrf' } });
   }
   if (path === '/api/admin/dashboard') {
@@ -312,8 +311,8 @@ createServer(async function (request, response) {
       'cache-control': 'no-store',
     };
     if (url.pathname === '/admin/' || url.pathname === '/admin/index.html') {
-      headers['set-cookie'] = url.searchParams.get('auth') === 'setup'
-        ? 'preview_auth=setup; Path=/; SameSite=Strict'
+      headers['set-cookie'] = ['login', 'missing'].includes(url.searchParams.get('auth'))
+        ? 'preview_auth=' + url.searchParams.get('auth') + '; Path=/; SameSite=Strict'
         : 'preview_auth=; Path=/; Max-Age=0; SameSite=Strict';
     }
     response.writeHead(200, headers);

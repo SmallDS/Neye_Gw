@@ -9,7 +9,6 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>官网订阅管理｜NEye</title>
     <link rel="stylesheet" href="./admin.css" />
-    <script src="./vendor/qrcode.js" defer></script>
     <script src="./admin.js" defer></script>
   </head>
   <body>
@@ -34,9 +33,9 @@
         <div class="auth-intro">
           <p class="auth-kicker">NEYE / WEBSITE OPERATIONS</p>
           <h1>支付、订单与订阅，保持同一套事实。</h1>
-          <p>本后台仅管理官网订阅。动态验证码绑定后，所有金额与权益操作都会进入审计记录。</p>
+          <p>本后台仅管理官网订阅。登录后，所有金额与权益操作都会进入审计记录。</p>
           <div class="auth-security">
-            <span>6 位 TOTP</span>
+            <span>账号密码</span>
             <span>8 小时会话</span>
             <span>边缘数据加密</span>
           </div>
@@ -47,74 +46,21 @@
             <span class="loading-line"></span><span class="loading-line short"></span><span class="loading-block"></span>
           </div>
 
-          <section data-auth-view="setup" hidden>
-            <p class="panel-kicker">首次启用</p>
-            <h2>绑定管理员验证器</h2>
-            <p class="panel-copy">输入部署时配置的初始化令牌，随后使用验证器扫描本地生成的二维码。</p>
-            <form class="stack-form" data-setup-start-form>
-              <label>
-                <span>初始化令牌</span>
-                <input name="token" type="password" autocomplete="off" required />
-              </label>
-              <button class="primary-button" type="submit">开始绑定 <span aria-hidden="true">→</span></button>
-            </form>
-            <div class="totp-bind" data-setup-confirm hidden>
-              <div class="qr-frame" data-setup-qr aria-label="TOTP 绑定二维码"></div>
-              <div class="secret-row">
-                <span>手动输入密钥</span>
-                <code data-setup-secret></code>
-                <button class="text-button" type="button" data-copy-secret>复制</button>
-              </div>
-              <form class="stack-form" data-setup-confirm-form>
-                <label>
-                  <span>验证器中的 6 位验证码</span>
-                  <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required />
-                </label>
-                <button class="primary-button" type="submit">确认并进入后台</button>
-              </form>
-            </div>
-          </section>
-
           <section data-auth-view="login" hidden>
-            <p class="panel-kicker">管理员验证</p>
-            <h2>输入动态验证码</h2>
-            <p class="panel-copy">打开已绑定的验证器，输入当前 6 位验证码。</p>
+            <p class="panel-kicker">管理员登录</p>
+            <h2>进入官网订阅后台</h2>
+            <p class="panel-copy">请输入在 ESA 服务端配置的管理员账号和密码。</p>
             <form class="stack-form" data-login-form>
               <label>
-                <span>动态验证码</span>
-                <input class="totp-input" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" autofocus required />
+                <span>管理员账号</span>
+                <input name="username" type="text" minlength="3" maxlength="64" autocomplete="username" autocapitalize="off" spellcheck="false" autofocus required />
               </label>
-              <button class="primary-button" type="submit">验证并登录 <span aria-hidden="true">→</span></button>
-            </form>
-            <button class="text-button auth-reset-link" type="button" data-show-reset>无法使用原验证器</button>
-          </section>
-
-          <section data-auth-view="reset" hidden>
-            <p class="panel-kicker">重新绑定</p>
-            <h2>更换管理员验证器</h2>
-            <p class="panel-copy">重新绑定成功后，所有旧会话会立即失效。</p>
-            <form class="stack-form" data-reset-start-form>
               <label>
-                <span>重置令牌</span>
-                <input name="token" type="password" autocomplete="off" required />
+                <span>管理员密码</span>
+                <input name="password" type="password" minlength="12" maxlength="256" autocomplete="current-password" required />
               </label>
-              <button class="primary-button" type="submit">生成新绑定信息</button>
+              <button class="primary-button" type="submit">登录 <span aria-hidden="true">→</span></button>
             </form>
-            <div class="totp-bind" data-reset-confirm hidden>
-              <div class="qr-frame" data-reset-qr aria-label="新 TOTP 绑定二维码"></div>
-              <div class="secret-row">
-                <span>手动输入密钥</span>
-                <code data-reset-secret></code>
-              </div>
-              <form class="stack-form" data-reset-confirm-form>
-                <label>
-                  <span>新验证器中的 6 位验证码</span>
-                  <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required />
-                </label>
-                <button class="primary-button" type="submit">确认重新绑定</button>
-              </form>
-            </div>
-            <button class="text-button auth-reset-link" type="button" data-show-login>返回登录</button>
           </section>
 
           <p class="form-message" data-auth-message role="alert" aria-live="polite"></p>
@@ -336,8 +282,8 @@
                 </fieldset>
 
                 <div class="sensitive-save">
-                  <div><strong>确认本次修改</strong><span>输入验证器中的新 6 位验证码。</span></div>
-                  <label><span class="sr-only">动态验证码</span><input class="totp-input compact-totp" name="totpCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" required /></label>
+                  <div><strong>确认本次修改</strong><span>输入管理员密码进行确认。</span></div>
+                  <label><span class="sr-only">管理员密码</span><input name="adminPassword" type="password" minlength="12" maxlength="256" autocomplete="current-password" placeholder="管理员密码" required /></label>
                   <button class="primary-button" type="submit">保存支付配置</button>
                 </div>
                 <p class="settings-root-note">后台身份、会话和数据加密根密钥仍由 ESA 托管，不会显示在此页面。</p>

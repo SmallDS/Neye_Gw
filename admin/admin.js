@@ -3,8 +3,6 @@
 const state = {
   csrfToken: '',
   activeView: 'dashboard',
-  setup: null,
-  reset: null,
   orderCursor: null,
   subscriberCursor: null,
   orderRows: [],
@@ -224,34 +222,20 @@ function enterAdmin(session) {
   switchView('dashboard');
 }
 
-function renderQr(target, uri) {
-  target.replaceChildren();
-  if (typeof window.qrcode !== 'function') {
-    target.textContent = '二维码组件加载失败，请使用手动密钥绑定。';
-    return;
-  }
-  const code = window.qrcode(0, 'M');
-  code.addData(uri);
-  code.make();
-  target.innerHTML = code.createSvgTag(5, 0, 'TOTP 绑定二维码');
-  const svg = target.querySelector('svg');
-  if (svg) {
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', 'TOTP 绑定二维码');
-  }
-}
-
 async function initializeAuth() {
   try {
     const payload = await api('/api/admin/auth/state', { allowAuthFailure: true });
     if (!payload.auth.configured) {
-      enterAuth('setup');
-      if (!payload.auth.setupAvailable) {
-        setMessage(one('[data-auth-message]'), '请先在 ESA 配置后台安全环境变量。', true);
-        one('[data-setup-start-form] button').disabled = true;
-      }
+      enterAuth('login');
+      setMessage(
+        one('[data-auth-message]'),
+        '管理后台尚未完成账号密码配置，请在 ESA 更新运行时配置后刷新页面。',
+        true
+      );
+      one('[data-login-form] button').disabled = true;
       return;
     }
+    one('[data-login-form] button').disabled = false;
     try {
       const session = await api('/api/admin/session', { allowAuthFailure: true });
       enterAdmin(session.session);
@@ -265,139 +249,27 @@ async function initializeAuth() {
 }
 
 function bindAuth() {
-  one('[data-setup-start-form]').addEventListener('submit', async function (event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const button = one('button[type="submit"]', form);
-    const token = new FormData(form).get('token');
-    buttonBusy(button, true, '验证中…');
-    try {
-      const payload = await api('/api/admin/auth/setup/start', { method: 'POST', body: { token: token } });
-      state.setup = { token: token, challengeId: payload.challenge.challengeId };
-      one('[data-setup-secret]').textContent = payload.challenge.secret;
-      renderQr(one('[data-setup-qr]'), payload.challenge.otpauthUri);
-      one('[data-setup-confirm]').hidden = false;
-      form.hidden = true;
-      setMessage(one('[data-auth-message]'), '绑定信息将在 10 分钟后失效。');
-      one('[data-setup-confirm-form] input[name="code"]').focus();
-    } catch (error) {
-      setMessage(one('[data-auth-message]'), errorMessage(error), true);
-    } finally {
-      buttonBusy(button, false);
-    }
-  });
-
-  one('[data-setup-confirm-form]').addEventListener('submit', async function (event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const button = one('button[type="submit"]', form);
-    if (!state.setup) return;
-    buttonBusy(button, true, '确认中…');
-    try {
-      const payload = await api('/api/admin/auth/setup/confirm', {
-        method: 'POST',
-        body: {
-          token: state.setup.token,
-          challengeId: state.setup.challengeId,
-          code: new FormData(form).get('code'),
-        },
-      });
-      state.setup = null;
-      form.reset();
-      one('[data-setup-secret]').textContent = '';
-      one('[data-setup-qr]').replaceChildren();
-      one('[data-setup-confirm]').hidden = true;
-      one('[data-setup-start-form]').reset();
-      one('[data-setup-start-form]').hidden = false;
-      enterAdmin(payload.session);
-      toast('管理员验证器已绑定。');
-    } catch (error) {
-      setMessage(one('[data-auth-message]'), errorMessage(error), true);
-    } finally {
-      buttonBusy(button, false);
-    }
-  });
-
   one('[data-login-form]').addEventListener('submit', async function (event) {
     event.preventDefault();
     const form = event.currentTarget;
     const button = one('button[type="submit"]', form);
-    buttonBusy(button, true, '验证中…');
+    const data = new FormData(form);
+    buttonBusy(button, true, '登录中…');
     try {
       const payload = await api('/api/admin/auth/login', {
         method: 'POST',
-        body: { code: new FormData(form).get('code') },
-      });
-      form.reset();
-      enterAdmin(payload.session);
-    } catch (error) {
-      setMessage(one('[data-auth-message]'), errorMessage(error), true);
-      one('input[name="code"]', form).select();
-    } finally {
-      buttonBusy(button, false);
-    }
-  });
-
-  one('[data-reset-start-form]').addEventListener('submit', async function (event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const button = one('button[type="submit"]', form);
-    const token = new FormData(form).get('token');
-    buttonBusy(button, true, '验证中…');
-    try {
-      const payload = await api('/api/admin/auth/reset/start', { method: 'POST', body: { token: token } });
-      state.reset = { token: token, challengeId: payload.challenge.challengeId };
-      one('[data-reset-secret]').textContent = payload.challenge.secret;
-      renderQr(one('[data-reset-qr]'), payload.challenge.otpauthUri);
-      one('[data-reset-confirm]').hidden = false;
-      form.hidden = true;
-      setMessage(one('[data-auth-message]'), '请使用新验证器完成首次校验。');
-    } catch (error) {
-      setMessage(one('[data-auth-message]'), errorMessage(error), true);
-    } finally {
-      buttonBusy(button, false);
-    }
-  });
-
-  one('[data-reset-confirm-form]').addEventListener('submit', async function (event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const button = one('button[type="submit"]', form);
-    if (!state.reset) return;
-    buttonBusy(button, true, '确认中…');
-    try {
-      const payload = await api('/api/admin/auth/reset/confirm', {
-        method: 'POST',
         body: {
-          token: state.reset.token,
-          challengeId: state.reset.challengeId,
-          code: new FormData(form).get('code'),
+          username: data.get('username'),
+          password: data.get('password'),
         },
       });
-      state.reset = null;
       form.reset();
-      one('[data-reset-secret]').textContent = '';
-      one('[data-reset-qr]').replaceChildren();
-      one('[data-reset-confirm]').hidden = true;
-      one('[data-reset-start-form]').reset();
-      one('[data-reset-start-form]').hidden = false;
       enterAdmin(payload.session);
-      toast('验证器已重新绑定，旧会话已失效。');
     } catch (error) {
       setMessage(one('[data-auth-message]'), errorMessage(error), true);
+      one('input[name="password"]', form).select();
     } finally {
       buttonBusy(button, false);
-    }
-  });
-
-  one('[data-show-reset]').addEventListener('click', function () { enterAuth('reset'); });
-  one('[data-show-login]').addEventListener('click', function () { enterAuth('login'); });
-  one('[data-copy-secret]').addEventListener('click', async function () {
-    try {
-      await navigator.clipboard.writeText(one('[data-setup-secret]').textContent);
-      setMessage(one('[data-auth-message]'), '密钥已复制。');
-    } catch {
-      setMessage(one('[data-auth-message]'), '无法自动复制，请手动选择密钥。', true);
     }
   });
 }
@@ -630,7 +502,7 @@ function renderPaymentConfig(payload) {
   one('[name="baseUrl"]', form).value = config.baseUrl || '';
   one('[name="privatePkcsKey"]', form).value = '';
   one('[name="alipayPublicKey"]', form).value = '';
-  one('[name="totpCode"]', form).value = '';
+  one('[name="adminPassword"]', form).value = '';
   one('[name="webhookEnabled"]', form).checked = config.webhookEnabled;
   one('[name="webhookUrl"]', form).value = config.webhookUrl || '';
   one('[name="webhookSecret"]', form).value = '';
@@ -965,7 +837,7 @@ function bindAdmin() {
         baseUrl: one('[name="baseUrl"]', paymentForm).value.trim(),
         webhookEnabled: one('[name="webhookEnabled"]', paymentForm).checked,
         webhookUrl: one('[name="webhookUrl"]', paymentForm).value.trim(),
-        totpCode: one('[name="totpCode"]', paymentForm).value.trim(),
+        adminPassword: one('[name="adminPassword"]', paymentForm).value,
       };
       if (privatePkcsKey) body.privatePkcsKey = privatePkcsKey;
       if (alipayPublicKey) body.alipayPublicKey = alipayPublicKey;
@@ -975,8 +847,8 @@ function bindAdmin() {
       toast('支付配置已加密保存。');
     } catch (error) {
       toast(errorMessage(error), true);
-      one('[name="totpCode"]', paymentForm).value = '';
-      one('[name="totpCode"]', paymentForm).focus();
+      one('[name="adminPassword"]', paymentForm).value = '';
+      one('[name="adminPassword"]', paymentForm).focus();
     } finally {
       buttonBusy(button, false);
     }

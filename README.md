@@ -5,8 +5,8 @@
 技术形态：
 
 - 原生 HTML、CSS、JavaScript，无前端构建步骤。
-- ESA Functions 处理订单、支付宝接口、TOTP 管理认证和 Webhook。
-- ESA Edge KV 保存 v2_ 数据；联系人、备注、TOTP 密钥和支付配置使用加密信封；优先 AES-GCM，ESA 受限运行时使用带随机 nonce 的 HMAC-SHA256 加密流并进行 HMAC 完整性校验。
+- ESA Functions 处理订单、支付宝接口、管理员账号密码认证和 Webhook。
+- ESA Edge KV 保存 v2_ 数据；联系人、备注和支付配置使用带完整性校验的加密信封。
 - 支付宝 AI 网页应用付款采用 fetch + node:crypto 实现 RSA2 协议，不把完整 Node SDK 作为线上依赖。
 - 月付和年付均为一次付款购买一个自然月或一个自然年，不自动续费。
 
@@ -26,7 +26,7 @@
 - GET /api/payment/return
 - POST /api/payment/notify
 
-管理接口统一位于 /api/admin/，包括 TOTP 绑定与重置、加密支付配置、概览、套餐、订单同步、关单、退款、退款查询、订阅调整、账单下载、CSV 导出、Webhook 重试和审计日志。
+管理接口统一位于 /api/admin/，包括账号密码登录、加密支付配置、概览、套餐、订单同步、关单、退款、退款查询、订阅调整、账单下载、CSV 导出、Webhook 重试和审计日志。
 
 支付结果只以验签后的支付宝异步通知或 alipay.trade.query 主动查询为准。同步返回只引导浏览器回到订单页，不直接把订单标记为已支付。
 
@@ -56,7 +56,7 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 
 ## 环境变量与后台安全配置
 
-ESA Pages 控制台中的“构建信息 > 环境变量”主要提供给构建过程使用。当前这个项目的线上请求函数无法从该处读取后台安全变量，因此只填写截图中的变量会导致 `/api/admin/auth/state` 仍返回 `setupAvailable: false`。
+ESA Pages 控制台中的“构建信息 > 环境变量”主要提供给构建过程使用。当前这个项目的线上请求函数无法从该处稳定读取后台安全变量，因此后台认证配置以 Edge KV 中的运行时记录为准。
 
 本项目现在优先读取运行时环境变量；如果 ESA 请求函数没有提供这些变量，就从同一 Edge KV 命名空间读取受保护的运行时配置。请在 ESA 控制台的“边缘计算与 AI > KV 存储”中，在 `neye-orders` 命名空间创建以下键：
 
@@ -65,16 +65,16 @@ ESA Pages 控制台中的“构建信息 > 环境变量”主要提供给构建�
 
 ```json
 {
-  "ADMIN_SETUP_TOKEN": "在本地粘贴你的 ADMIN_SETUP_TOKEN",
-  "ADMIN_RESET_TOKEN": "在本地粘贴你的 ADMIN_RESET_TOKEN",
+  "ADMIN_USERNAME": "你的管理员账号",
+  "ADMIN_PASSWORD": "至少 12 位的强密码",
   "ADMIN_DATA_KEY": "在本地粘贴你的 ADMIN_DATA_KEY",
   "ADMIN_SESSION_SECRET": "在本地粘贴你的 ADMIN_SESSION_SECRET"
 }
 ```
 
-上面四个值只在 ESA KV 控制台填写，不要发送给我，不要写入 Git、HTML、浏览器脚本、构建日志或普通运行日志。`ADMIN_SETUP_TOKEN` 与 `ADMIN_RESET_TOKEN` 必须不同；`ADMIN_DATA_KEY` 部署后不要更换，否则已有加密数据无法读取，订阅用户标识也会变化。截图中已有的 `ESA_KV_NAMESPACE=neye-orders` 可以保留；如果请求函数读不到它，代码默认也会使用 `neye-orders`。
+上面四个值只在 ESA KV 控制台填写，不要发送给我，不要写入 Git、HTML、浏览器脚本、构建日志或普通运行日志。`ADMIN_USERNAME` 支持 3 至 64 位字母、数字、点、下划线和短横线；`ADMIN_PASSWORD` 至少 12 位，建议使用 20 位以上随机密码。`ADMIN_DATA_KEY` 部署后不要更换，否则已有加密数据无法读取，订阅用户标识也会变化。截图中已有的 `ESA_KV_NAMESPACE=neye-orders` 可以保留；如果请求函数读不到它，代码默认也会使用 `neye-orders`。
 
-KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/`。调用 `/api/admin/auth/state` 时，预期是 `setupAvailable: true`、`resetAvailable: true`；首次尚未绑定 TOTP 时 `configured: false` 是正常的。Edge KV 是最终一致存储，通常数秒内同步，官方文档说明最长可能需要 300 秒。
+KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/`。调用 `/api/admin/auth/state` 时，预期返回 `mode: "password"`、`configured: true` 和 `loginAvailable: true`。Edge KV 是最终一致存储，通常数秒内同步，官方文档说明最长可能需要 300 秒；函数内部还会缓存运行时配置 30 秒。
 
 支付宝收款参数在 `/admin/` 的“支付配置”中维护：
 
@@ -83,15 +83,15 @@ KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/
 - Node.js 使用的 PKCS#1 应用私钥、支付宝公钥。
 - 可选的订阅 Webhook 地址和 HMAC 签名密钥。
 
-页面只返回配置状态和密钥指纹。密钥输入框始终为空，留空保存表示保留当前密钥；每次保存都需要一个未使用过的 6 位 TOTP。登录时刚使用的验证码不能重复用于改配置，必要时等待下一组验证码。
+页面只返回配置状态和密钥指纹。密钥输入框始终为空，留空保存表示保留当前密钥；每次保存支付配置都需要再次输入管理员密码。
 
 为兼容其他 ESA 运行时，以下变量仍可作为环境变量读取；在当前 Pages 部署中，后台安全配置以运行时 KV 记录为准：
 
 | 变量 | 用途 |
 | --- | --- |
 | ESA_KV_NAMESPACE | Edge KV 命名空间，当前使用 `neye-orders` |
-| ADMIN_SETUP_TOKEN | 首次绑定 TOTP 的高强度随机令牌 |
-| ADMIN_RESET_TOKEN | 丢失验证器时重新绑定的独立高强度随机令牌 |
+| ADMIN_USERNAME | 管理后台登录账号 |
+| ADMIN_PASSWORD | 管理后台登录密码，至少 12 位 |
 | ADMIN_DATA_KEY | AES-GCM 与联系人 HMAC 的高强度随机密钥 |
 | ADMIN_SESSION_SECRET | 8 小时管理会话的高强度随机签名密钥 |
 
@@ -111,21 +111,19 @@ KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/
 安全要求：
 
 - 不要把任何变量值写入 Git、HTML、浏览器脚本、构建日志或普通运行日志。
-- 4 个管理员安全值建议分别使用至少 32 字节随机值。
+- `ADMIN_PASSWORD` 建议使用密码管理器生成 20 位以上随机密码；`ADMIN_DATA_KEY` 与 `ADMIN_SESSION_SECRET` 分别使用至少 32 字节随机值。
 - AIPAY_PUBLIC_KEY 是应用公钥，不是验签所需的支付宝公钥；运行时使用 AIPAY_ALIPAY_PUBLIC_KEY。
 - 之前在聊天中出现过的应用私钥已视为泄露。沙箱和正式环境都必须重新生成应用密钥，并在支付宝开放平台重新匹配应用公钥后再部署。
 ## 首次进入后台
 
 1. 发布完成后打开 https://www.smallds.icu/admin/。
-2. 输入 ADMIN_SETUP_TOKEN。
-3. 使用支持 TOTP 的验证器扫描页面本地生成的二维码。
-4. 输入当前 6 位验证码完成绑定。
-5. 打开“支付配置”，填写支付宝沙箱参数与新生成的 PKCS#1 应用私钥。
-6. 等待验证器显示下一组 6 位验证码，确认并加密保存支付配置。
-7. 后续登录只需要 6 位 TOTP，管理会话有效期为 8 小时。
-8. 验证器丢失时使用 ADMIN_RESET_TOKEN 重新绑定；成功后所有旧会话立即失效。
+2. 输入 `ADMIN_USERNAME` 与 `ADMIN_PASSWORD` 登录。
+3. 打开“支付配置”，填写支付宝沙箱参数与新生成的 PKCS#1 应用私钥。
+4. 再次输入管理员密码，确认并加密保存支付配置。
+5. 管理会话有效期为 8 小时；退出后会立即清除浏览器会话 Cookie。
+6. 如需修改账号或密码，直接更新 `v2_runtime_config`；同步生效后，旧会话会自动失效。
 
-系统不生成恢复码。当前为联调阶段，后台认证函数内限流暂时关闭；正式开放前应恢复限流并启用 ESA WAF 规则。支付配置写入需要 TOTP；套餐改价、退款、关单和权益调整显示二次确认并写入审计日志，但不重复要求 TOTP。
+账号密码由 ESA 服务端配置托管，不提供网页端找回或重置入口。函数内会限制连续登录失败和敏感密码确认失败；同时建议启用 ESA WAF 频次控制。套餐改价、退款、关单和权益调整显示二次确认并写入审计日志。
 
 ## ESA WAF 建议
 
@@ -134,8 +132,6 @@ KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/
 | 请求路径 | 建议阈值 | 超限动作 |
 | --- | --- | --- |
 | /api/admin/auth/login | 5 次 / 60 秒 | 拦截 10 分钟 |
-| /api/admin/auth/setup/start、/api/admin/auth/reset/start | 3 次 / 10 分钟 | 拦截 20 分钟 |
-| /api/admin/auth/setup/confirm、/api/admin/auth/reset/confirm | 5 次 / 10 分钟 | 拦截 20 分钟 |
 | PUT /api/admin/payment-config | 5 次 / 10 分钟 | 拦截 10 分钟 |
 | /api/admin/ 其他接口 | 120 次 / 60 秒 | 拦截 5 分钟 |
 | /api/payment/create | 20 次 / 60 秒 | 拦截 10 分钟 |
@@ -174,14 +170,10 @@ KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/
 
 静态页面预览可使用任意本地静态服务器；本地 file:// 或纯静态服务器无法模拟 ESA Functions、Edge KV 与支付宝回调。
 
-当前自动测试覆盖 TOTP 绑定、敏感配置二次验证与重放、支付配置加密和不回显、CSRF、限流、金额快照、自然月/年、RSA2 请求签名、支付宝响应验签、通知幂等、续期、部分和全额退款、退款查询、关单、账单下载以及 Webhook 签名与重试。
+当前自动测试覆盖账号密码登录、密码变更后的旧会话失效、敏感配置二次验证、支付配置加密和不回显、CSRF、限流、金额快照、自然月/年、RSA2 请求签名、支付宝响应验签、通知幂等、续期、部分和全额退款、退款查询、关单、账单下载以及 Webhook 签名与重试。
 
 支付宝沙箱仍需在 ESA 测试环境完成真实联调，尤其是月付、年付、异步通知、主动查询、部分退款、全额退款、关单和昨日账单下载。
 
 ## 搜索引擎
 
 首页允许收录并已配置 canonical、Open Graph、结构化数据、robots.txt 和 sitemap.xml。/admin/、/payment.html、管理接口和支付接口均禁止收录。
-
-## 第三方文件
-
-admin/vendor/qrcode.js 来自 qrcode-generator 1.4.4，按其 MIT License 使用，仅在浏览器本地生成 TOTP 二维码，不连接第三方二维码服务。

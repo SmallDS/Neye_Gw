@@ -12,7 +12,7 @@ export const DEFAULT_BASE_URL = 'https://www.smallds.icu';
 export const SANDBOX_GATEWAY = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do';
 export const PRODUCTION_GATEWAY = 'https://openapi.alipay.com/gateway.do';
 export const SUCCESS_TRADE_STATUSES = Object.freeze(['TRADE_SUCCESS', 'TRADE_FINISHED']);
-export const RUNTIME_VERSION = '2026-08-13.4';
+export const RUNTIME_VERSION = '2026-08-13.5';
 export const INDEX_SHARDS = 16;
 export const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 export const MAX_RANGE_DAYS = 93;
@@ -53,8 +53,8 @@ function readRuntimeEnv(name) {
     case 'AIPAY_RETURN_URL': return process.env.AIPAY_RETURN_URL;
     case 'AIPAY_NOTIFY_URL': return process.env.AIPAY_NOTIFY_URL;
     case 'ESA_KV_NAMESPACE': return process.env.ESA_KV_NAMESPACE;
-    case 'ADMIN_SETUP_TOKEN': return process.env.ADMIN_SETUP_TOKEN;
-    case 'ADMIN_RESET_TOKEN': return process.env.ADMIN_RESET_TOKEN;
+    case 'ADMIN_USERNAME': return process.env.ADMIN_USERNAME;
+    case 'ADMIN_PASSWORD': return process.env.ADMIN_PASSWORD;
     case 'ADMIN_DATA_KEY': return process.env.ADMIN_DATA_KEY;
     case 'ADMIN_SESSION_SECRET': return process.env.ADMIN_SESSION_SECRET;
     case 'SUBSCRIPTION_WEBHOOK_URL': return process.env.SUBSCRIPTION_WEBHOOK_URL;
@@ -85,8 +85,8 @@ export function readConfig() {
     returnUrl: readEnv('AIPAY_RETURN_URL', baseUrl + '/api/payment/return'),
     notifyUrl: readEnv('AIPAY_NOTIFY_URL', baseUrl + '/api/payment/notify'),
     kvNamespace: readEnv('ESA_KV_NAMESPACE', 'neye-orders'),
-    adminSetupToken: readEnv('ADMIN_SETUP_TOKEN'),
-    adminResetToken: readEnv('ADMIN_RESET_TOKEN'),
+    adminUsername: readEnv('ADMIN_USERNAME'),
+    adminPassword: readEnv('ADMIN_PASSWORD'),
     adminDataKey: readEnv('ADMIN_DATA_KEY'),
     adminSessionSecret: readEnv('ADMIN_SESSION_SECRET'),
     webhookUrl: readEnv('SUBSCRIPTION_WEBHOOK_URL'),
@@ -126,8 +126,8 @@ function runtimeConfigValue(record, key) {
 
 export async function loadRuntimeConfig(config) {
   const requiredFields = [
-    ['adminSetupToken', 'ADMIN_SETUP_TOKEN'],
-    ['adminResetToken', 'ADMIN_RESET_TOKEN'],
+    ['adminUsername', 'ADMIN_USERNAME'],
+    ['adminPassword', 'ADMIN_PASSWORD'],
     ['adminDataKey', 'ADMIN_DATA_KEY'],
     ['adminSessionSecret', 'ADMIN_SESSION_SECRET'],
   ];
@@ -181,14 +181,14 @@ export function requirePaymentConfig(config) {
   }
 }
 
-export function requireAdminConfig(config, mode = 'login') {
-  const ready = Boolean(config.adminDataKey && config.adminSessionSecret);
-  const tokenReady = mode === 'setup'
-    ? Boolean(config.adminSetupToken)
-    : mode === 'reset'
-      ? Boolean(config.adminResetToken)
-      : true;
-  if (!ready || !tokenReady) {
+export function requireAdminConfig(config) {
+  const username = String(config.adminUsername || '').trim();
+  const password = String(config.adminPassword || '');
+  const ready = /^[A-Za-z0-9._-]{3,64}$/.test(username)
+    && password.length >= 12
+    && password.length <= 256
+    && Boolean(config.adminDataKey && config.adminSessionSecret);
+  if (!ready) {
     throw new AppError(503, 'ADMIN_CONFIG_MISSING', '管理后台尚未完成安全配置。');
   }
 }

@@ -20,7 +20,6 @@ import {
   rsaVerify,
   RUNTIME_VERSION,
 } from '../esa/lib/core.js';
-import { totpCode } from '../esa/lib/auth.js';
 import {
   expectedSellerMatches,
   extractRawResponseObject,
@@ -145,8 +144,8 @@ function testConfig(overrides) {
     returnUrl: 'https://www.smallds.icu/api/payment/return',
     notifyUrl: 'https://www.smallds.icu/api/payment/notify',
     kvNamespace: 'test-neye',
-    adminSetupToken: 'setup-token-for-tests',
-    adminResetToken: 'reset-token-for-tests',
+    adminUsername: 'admin',
+    adminPassword: 'password-for-tests-2026',
     adminDataKey: 'test-data-key-that-is-long-and-random',
     adminSessionSecret: 'test-session-key-that-is-long-and-random',
     webhookUrl: '',
@@ -171,44 +170,35 @@ async function payload(response) {
 
 function cookiesFrom(response) {
   const raw = response.headers.get('set-cookie') || '';
-  const session = raw.match(/neye_admin_session=([^;,\s]+)/);
-  const csrf = raw.match(/neye_admin_csrf=([^;,\s]+)/);
+  const session = raw.match(/__Host-neye_admin_session=([^;,\s]+)/);
+  const csrf = raw.match(/__Host-neye_admin_csrf=([^;,\s]+)/);
   assert.ok(session, 'session cookie should be present');
   assert.ok(csrf, 'csrf cookie should be present');
   return {
-    header: 'neye_admin_session=' + session[1] + '; neye_admin_csrf=' + csrf[1],
+    header: '__Host-neye_admin_session=' + session[1] + '; __Host-neye_admin_csrf=' + csrf[1],
     raw: raw,
   };
 }
 
-async function setupAdmin(store, config, ip, codeOffsetMs = 0) {
+async function loginAdmin(store, config, ip) {
   const commonHeaders = { 'x-forwarded-for': ip || '198.51.100.10' };
-  const started = await routeRequest(request('/api/admin/auth/setup/start', {
-    method: 'POST',
-    headers: commonHeaders,
-    json: { token: config.adminSetupToken },
-  }), { store: store, config: config, requestId: 'REQ_SETUP_START' });
-  assert.equal(started.status, 201);
-  const startBody = await payload(started);
-  const code = totpCode(startBody.challenge.secret, Date.now() + codeOffsetMs);
-  const confirmed = await routeRequest(request('/api/admin/auth/setup/confirm', {
+  const response = await routeRequest(request('/api/admin/auth/login', {
     method: 'POST',
     headers: commonHeaders,
     json: {
-      token: config.adminSetupToken,
-      challengeId: startBody.challenge.challengeId,
-      code: code,
+      username: config.adminUsername,
+      password: config.adminPassword,
     },
-  }), { store: store, config: config, requestId: 'REQ_SETUP_CONFIRM' });
-  const confirmBody = await payload(confirmed);
-  const cookies = cookiesFrom(confirmed);
+  }), { store: store, config: config, requestId: 'REQ_ADMIN_LOGIN' });
+  assert.equal(response.status, 200);
+  const body = await payload(response);
+  const cookies = cookiesFrom(response);
   assert.match(cookies.raw, /HttpOnly/);
   assert.match(cookies.raw, /Secure/);
   assert.match(cookies.raw, /SameSite=Strict/);
   return {
-    secret: startBody.challenge.secret,
     cookie: cookies.header,
-    csrfToken: confirmBody.session.csrfToken,
+    csrfToken: body.session.csrfToken,
   };
 }
 
@@ -249,8 +239,8 @@ test('金额、联系方式、北京时间自然周期和加密信封保持精�
 test('ESA 环境变量直接读取映射保持可用', function () {
   const names = [
     'ESA_KV_NAMESPACE',
-    'ADMIN_SETUP_TOKEN',
-    'ADMIN_RESET_TOKEN',
+    'ADMIN_USERNAME',
+    'ADMIN_PASSWORD',
     'ADMIN_DATA_KEY',
     'ADMIN_SESSION_SECRET',
   ];
@@ -259,14 +249,14 @@ test('ESA 环境变量直接读取映射保持可用', function () {
   }));
   try {
     process.env.ESA_KV_NAMESPACE = 'direct-neye';
-    process.env.ADMIN_SETUP_TOKEN = 'setup-direct';
-    process.env.ADMIN_RESET_TOKEN = 'reset-direct';
+    process.env.ADMIN_USERNAME = 'admin-direct';
+    process.env.ADMIN_PASSWORD = 'password-direct-2026';
     process.env.ADMIN_DATA_KEY = 'data-direct';
     process.env.ADMIN_SESSION_SECRET = 'session-direct';
     const config = readConfig();
     assert.equal(config.kvNamespace, 'direct-neye');
-    assert.equal(config.adminSetupToken, 'setup-direct');
-    assert.equal(config.adminResetToken, 'reset-direct');
+    assert.equal(config.adminUsername, 'admin-direct');
+    assert.equal(config.adminPassword, 'password-direct-2026');
     assert.equal(config.adminDataKey, 'data-direct');
     assert.equal(config.adminSessionSecret, 'session-direct');
   } finally {
@@ -276,20 +266,20 @@ test('ESA 环境变量直接读取映射保持可用', function () {
     }
   }
 });
-test('后台认证使用 ESA 兼容加密挑战与凭据', async function () {
-  const encrypted = await encryptJsonAsync({ value: 'totp-secret' }, 'webcrypto-test-key', 'admin-test');
+test('后台敏感数据使用 ESA 兼容加密信封', async function () {
+  const encrypted = await encryptJsonAsync({ value: 'sensitive-value' }, 'webcrypto-test-key', 'admin-test');
   assert.match(encrypted, /^v4\./);
   assert.deepEqual(
     await decryptJsonAsync(encrypted, 'webcrypto-test-key', 'admin-test'),
-    { value: 'totp-secret' },
+    { value: 'sensitive-value' },
   );
 });
 test('ESA portable crypto envelope round trip and tamper detection', function () {
-  const encrypted = encryptJsonPortable({ value: 'totp-secret' }, 'portable-test-key', 'admin-test');
+  const encrypted = encryptJsonPortable({ value: 'sensitive-value' }, 'portable-test-key', 'admin-test');
   assert.match(encrypted, /^v4\./);
   assert.deepEqual(
     decryptJsonPortable(encrypted.split('.'), 'portable-test-key', 'admin-test'),
-    { value: 'totp-secret' },
+    { value: 'sensitive-value' },
   );
   const parts = encrypted.split('.');
   parts[2] = parts[2].slice(0, -1) + (parts[2].endsWith('a') ? 'b' : 'a');
@@ -309,8 +299,8 @@ test('ESA Edge KV 可为请求函数提供后台安全配置', async function ()
     async get(key) {
       assert.equal(key, 'v2_runtime_config');
       return JSON.stringify({
-        ADMIN_SETUP_TOKEN: 'setup-from-kv',
-        ADMIN_RESET_TOKEN: 'reset-from-kv',
+        ADMIN_USERNAME: 'admin-from-kv',
+        ADMIN_PASSWORD: 'password-from-kv-2026',
         ADMIN_DATA_KEY: 'data-from-kv',
         ADMIN_SESSION_SECRET: 'session-from-kv',
       });
@@ -320,13 +310,13 @@ test('ESA Edge KV 可为请求函数提供后台安全配置', async function ()
   try {
     const config = await loadRuntimeConfig(testConfig({
       kvNamespace: 'neye-orders',
-      adminSetupToken: '',
-      adminResetToken: '',
+      adminUsername: '',
+      adminPassword: '',
       adminDataKey: '',
       adminSessionSecret: '',
     }));
-    assert.equal(config.adminSetupToken, 'setup-from-kv');
-    assert.equal(config.adminResetToken, 'reset-from-kv');
+    assert.equal(config.adminUsername, 'admin-from-kv');
+    assert.equal(config.adminPassword, 'password-from-kv-2026');
     assert.equal(config.adminDataKey, 'data-from-kv');
     assert.equal(config.adminSessionSecret, 'session-from-kv');
     assert.equal(config.runtimeConfigSource, 'edge-kv');
@@ -345,11 +335,22 @@ test('后台认证状态接口返回部署版本且不泄露安全配置', async
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('x-neye-runtime-version'), RUNTIME_VERSION);
   assert.deepEqual(body.auth, {
-    configured: false,
-    setupAvailable: true,
-    resetAvailable: true,
+    mode: 'password',
+    configured: true,
+    loginAvailable: true,
   });
-  assert.equal(JSON.stringify(body).includes('setup-token-for-tests'), false);
+  assert.equal(JSON.stringify(body).includes('password-for-tests-2026'), false);
+
+  const missingResponse = await routeRequest(request('/api/admin/auth/state'), {
+    store: new MemoryStore(),
+    config: testConfig({ adminPassword: '' }),
+    requestId: 'REQ_AUTH_STATE_MISSING',
+  });
+  assert.deepEqual((await payload(missingResponse)).auth, {
+    mode: 'password',
+    configured: false,
+    loginAvailable: false,
+  });
 });
 test('支付宝请求签名包含 sign_type，响应验签覆盖原始 JSON', function () {
   const params = {
@@ -382,10 +383,10 @@ test('支付宝请求签名包含 sign_type，响应验签覆盖原始 JSON', fu
   assert.throws(function () { verifyAlipayResponse(tampered, testConfig(), responseKey); }, /签名校验/);
 });
 
-test('TOTP 首次绑定、重放保护、CSRF、重置和旧会话失效', async function () {
+test('账号密码登录、CSRF、错误凭据和修改密码后的旧会话失效', async function () {
   const store = new MemoryStore();
   const config = testConfig();
-  const session = await setupAdmin(store, config, '198.51.100.20');
+  const session = await loginAdmin(store, config, '198.51.100.20');
 
   const checked = await routeRequest(adminRequest('/api/admin/session', session), {
     store: store,
@@ -404,50 +405,41 @@ test('TOTP 首次绑定、重放保护、CSRF、重置和旧会话失效', async
   );
 
   await assert.rejects(
+    routeRequest(adminRequest('/api/admin/plans', session, {
+      method: 'PUT',
+      headers: { origin: 'https://attacker.example' },
+      json: { salesEnabled: true, plans: [] },
+    }), { store: store, config: config, requestId: 'REQ_WRONG_ORIGIN' }),
+    function (error) { return error.code === 'ORIGIN_INVALID'; }
+  );
+
+  await assert.rejects(
     routeRequest(request('/api/admin/auth/login', {
       method: 'POST',
       headers: { 'x-forwarded-for': '198.51.100.20' },
-      json: { code: totpCode(session.secret) },
-    }), { store: store, config: config, requestId: 'REQ_REPLAY' }),
-    function (error) { return error.code === 'TOTP_INVALID'; }
+      json: { username: config.adminUsername, password: 'wrong-password-value' },
+    }), { store: store, config: config, requestId: 'REQ_WRONG_PASSWORD' }),
+    function (error) { return error.code === 'ADMIN_CREDENTIALS_INVALID'; }
   );
 
-  const futureCode = totpCode(session.secret, Date.now() + 30000);
   const login = await routeRequest(request('/api/admin/auth/login', {
     method: 'POST',
     headers: { 'x-forwarded-for': '198.51.100.20' },
-    json: { code: futureCode },
+    json: { username: 'ADMIN', password: config.adminPassword },
   }), { store: store, config: config, requestId: 'REQ_LOGIN' });
   assert.equal(login.status, 200);
-
-  const resetStarted = await routeRequest(request('/api/admin/auth/reset/start', {
-    method: 'POST',
-    headers: { 'x-forwarded-for': '198.51.100.20' },
-    json: { token: config.adminResetToken },
-  }), { store: store, config: config, requestId: 'REQ_RESET_START' });
-  const reset = await payload(resetStarted);
-  const resetConfirmed = await routeRequest(request('/api/admin/auth/reset/confirm', {
-    method: 'POST',
-    headers: { 'x-forwarded-for': '198.51.100.20' },
-    json: {
-      token: config.adminResetToken,
-      challengeId: reset.challenge.challengeId,
-      code: totpCode(reset.challenge.secret),
-    },
-  }), { store: store, config: config, requestId: 'REQ_RESET_CONFIRM' });
-  assert.equal(resetConfirmed.status, 200);
 
   await assert.rejects(
     routeRequest(adminRequest('/api/admin/session', session), {
       store: store,
-      config: config,
+      config: testConfig({ adminPassword: 'changed-password-for-tests-2026' }),
       requestId: 'REQ_OLD_SESSION',
     }),
     function (error) { return error.code === 'ADMIN_AUTH_REQUIRED'; }
   );
 });
 
-test('支付配置经 TOTP 加密保存，密钥不回显且环境变量仍可作为兜底', async function () {
+test('支付配置经管理员密码确认后加密保存，密钥不回显且环境变量仍可作为兜底', async function () {
   const fallback = await resolvePaymentConfig(new MemoryStore(), testConfig());
   assert.equal(fallback.paymentConfigSource, 'environment');
   assert.equal(fallback.appId, '2026000000000000');
@@ -462,7 +454,7 @@ test('支付配置经 TOTP 加密保存，密钥不回显且环境变量仍可�
     webhookUrl: '',
     webhookSecret: '',
   });
-  const session = await setupAdmin(store, rootConfig, '198.51.100.25', -30000);
+  const session = await loginAdmin(store, rootConfig, '198.51.100.25');
   const managedApplicationKeys = generateKeyPairSync('rsa', {
     modulusLength: 2048,
     publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -470,7 +462,6 @@ test('支付配置经 TOTP 加密保存，密钥不回显且环境变量仍可�
   });
   const privatePkcsKey = pemBody(managedApplicationKeys.privateKey);
   const alipayPublicKey = pemBody(alipayKeys.publicKey);
-  const firstCode = totpCode(session.secret);
   const baseInput = {
     paymentEnvironment: 'sandbox',
     appId: '9021000000000001',
@@ -479,7 +470,7 @@ test('支付配置经 TOTP 加密保存，密钥不回显且环境变量仍可�
     baseUrl: 'https://www.smallds.icu',
     webhookEnabled: false,
     alipayPublicKey,
-    totpCode: firstCode,
+    adminPassword: rootConfig.adminPassword,
   };
 
   await assert.rejects(
@@ -534,9 +525,12 @@ test('支付配置经 TOTP 加密保存，密钥不回显且环境变量仍可�
   await assert.rejects(
     routeRequest(adminRequest('/api/admin/payment-config', session, {
       method: 'PUT',
-      json: Object.assign({}, baseInput, { privatePkcsKey }),
-    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_REPLAY' }),
-    function (error) { return error.code === 'TOTP_INVALID'; }
+      json: Object.assign({}, baseInput, {
+        privatePkcsKey,
+        adminPassword: 'wrong-password-value',
+      }),
+    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_WRONG_PASSWORD' }),
+    function (error) { return error.code === 'ADMIN_PASSWORD_INVALID'; }
   );
 
   const retained = await routeRequest(adminRequest('/api/admin/payment-config', session, {
@@ -548,7 +542,7 @@ test('支付配置经 TOTP 加密保存，密钥不回显且环境变量仍可�
       sellerEmail: 'merchant@example.com',
       baseUrl: baseInput.baseUrl,
       webhookEnabled: false,
-      totpCode: totpCode(session.secret, Date.now() + 30000),
+      adminPassword: rootConfig.adminPassword,
     },
   }), { store, config: rootConfig, requestId: 'REQ_CONFIG_RETAIN' });
   const retainedBody = await payload(retained);
@@ -740,7 +734,7 @@ test('套餐快照、支付确认、通知幂等、续期、退款、退款查�
   const config = testConfig();
   const gateway = installGatewayMock(config);
   try {
-    const admin = await setupAdmin(store, config, '198.51.100.30');
+    const admin = await loginAdmin(store, config, '198.51.100.30');
 
     const plansResponse = await routeRequest(request('/api/subscription/plans'), {
       store: store,
@@ -990,24 +984,31 @@ test('不支持的通知事件和金额不一致不会更新订单', async funct
     gateway.restore();
   }
 });
-test('后台认证暂时关闭函数内限流，过期会话仍由服务端拒绝', async function () {
+test('后台账号密码登录限制连续失败尝试，过期会话仍由服务端拒绝', async function () {
   const store = new MemoryStore();
   const config = testConfig();
-  for (let index = 0; index < 4; index += 1) {
+  for (let index = 0; index < 5; index += 1) {
     await assert.rejects(
-      routeRequest(request('/api/admin/auth/setup/start', {
+      routeRequest(request('/api/admin/auth/login', {
         method: 'POST',
         headers: { 'x-forwarded-for': '198.51.100.40' },
-        json: { token: 'wrong-token' },
-      }), { store: store, config: config, requestId: 'REQ_NO_RATE_' + index }),
-      function (error) { return error.code === 'ADMIN_TOKEN_INVALID'; }
+        json: { username: config.adminUsername, password: 'wrong-password-value' },
+      }), { store: store, config: config, requestId: 'REQ_RATE_' + index }),
+      function (error) { return error.code === 'ADMIN_CREDENTIALS_INVALID'; }
     );
   }
+  await assert.rejects(
+    routeRequest(request('/api/admin/auth/login', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '198.51.100.40' },
+      json: { username: config.adminUsername, password: 'wrong-password-value' },
+    }), { store: store, config: config, requestId: 'REQ_RATE_LIMITED' }),
+    function (error) { return error.code === 'RATE_LIMITED'; }
+  );
 
   const sessionStore = new MemoryStore();
-  await setupAdmin(sessionStore, config, '198.51.100.41');
   const expired = encodeSignedPayload({
-    version: 1,
+    version: 'expired-version',
     issuedAt: Math.floor(Date.now() / 1000) - 100,
     expiresAt: Math.floor(Date.now() / 1000) - 1,
     csrf: 'expired-csrf',
@@ -1015,7 +1016,7 @@ test('后台认证暂时关闭函数内限流，过期会话仍由服务端拒�
   }, config.adminSessionSecret);
   await assert.rejects(
     routeRequest(request('/api/admin/session', {
-      headers: { cookie: 'neye_admin_session=' + encodeURIComponent(expired) },
+      headers: { cookie: '__Host-neye_admin_session=' + encodeURIComponent(expired) },
     }), { store: sessionStore, config: config, requestId: 'REQ_EXPIRED' }),
     function (error) { return error.code === 'ADMIN_AUTH_REQUIRED'; }
   );
