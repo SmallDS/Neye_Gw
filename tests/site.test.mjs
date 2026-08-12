@@ -18,6 +18,7 @@ import {
   normalizeContact,
   rsaSign,
   rsaVerify,
+  RUNTIME_VERSION,
 } from '../esa/lib/core.js';
 import { totpCode } from '../esa/lib/auth.js';
 import {
@@ -333,6 +334,23 @@ test('ESA Edge KV 可为请求函数提供后台安全配置', async function ()
     if (previous === undefined) delete globalThis.EdgeKV;
     else globalThis.EdgeKV = previous;
   }
+});
+test('后台认证运行时自检只返回安全状态和部署版本', async function () {
+  const response = await routeRequest(request('/api/admin/auth/health'), {
+    store: new MemoryStore(),
+    config: testConfig(),
+    requestId: 'REQ_AUTH_HEALTH',
+  });
+  const body = await payload(response);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-neye-runtime-version'), RUNTIME_VERSION);
+  assert.deepEqual(body.health, {
+    runtimeVersion: RUNTIME_VERSION,
+    cryptoReady: true,
+    envelopeVersion: 'v4',
+    stage: '',
+  });
+  assert.equal(JSON.stringify(body).includes('portable-test-key'), false);
 });
 test('支付宝请求签名包含 sign_type，响应验签覆盖原始 JSON', function () {
   const params = {

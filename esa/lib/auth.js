@@ -12,6 +12,7 @@ import {
   parseCookies,
   randomId,
   requireAdminConfig,
+  RUNTIME_VERSION,
 } from './core.js';
 
 const ADMIN_AUTH_KEY = 'v2_admin_auth';
@@ -193,6 +194,30 @@ export async function getAuthState(store, config) {
     setupAvailable: Boolean(config.adminSetupToken && config.adminDataKey && config.adminSessionSecret),
     resetAvailable: Boolean(config.adminResetToken && config.adminDataKey && config.adminSessionSecret),
   };
+}
+
+export async function getAuthRuntimeHealth(config) {
+  const health = {
+    runtimeVersion: RUNTIME_VERSION,
+    cryptoReady: false,
+    envelopeVersion: '',
+    stage: '',
+  };
+  if (!config.adminDataKey) {
+    health.stage = 'data_key_missing';
+    return health;
+  }
+  try {
+    const context = 'v2_admin_runtime_health';
+    const encrypted = await encryptJsonAsync({ value: 'ready' }, config.adminDataKey, context);
+    const decrypted = await decryptJsonAsync(encrypted, config.adminDataKey, context);
+    health.cryptoReady = decrypted?.value === 'ready';
+    health.envelopeVersion = String(encrypted).split('.')[0] || '';
+    if (!health.cryptoReady) health.stage = 'crypto_round_trip';
+  } catch (error) {
+    health.stage = error instanceof AppError ? error.code : 'crypto_runtime';
+  }
+  return health;
 }
 
 function setupFailure(stage, error) {

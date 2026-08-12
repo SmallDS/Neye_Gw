@@ -11,6 +11,7 @@ import {
   readConfig,
   requestId as createRequestId,
   requirePaymentConfig,
+  RUNTIME_VERSION,
   sanitizeText,
   sha256,
   SUCCESS_TRADE_STATUSES,
@@ -19,6 +20,7 @@ import {
   clearSessionCookies,
   confirmReset,
   confirmSetup,
+  getAuthRuntimeHealth,
   getAuthState,
   login,
   requireAdminSession,
@@ -85,6 +87,7 @@ function responseHeaders(request, config, requestId, contentType, extra = {}) {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'X-Request-Id': requestId,
+    'X-Neye-Runtime-Version': RUNTIME_VERSION,
   });
   const pathname = new URL(request.url).pathname;
   if (pathname.startsWith('/api/admin/') || pathname.startsWith('/api/payment/')) {
@@ -126,9 +129,15 @@ export function errorResponse(request, config, requestId, error) {
   if (new URL(request.url).pathname === '/api/payment/notify') {
     return plainResponse(request, config, requestId, 'fail', error instanceof AppError ? error.status : 500);
   }
-  const status = error instanceof AppError ? error.status : 500;
-  const code = error instanceof AppError ? error.code : 'INTERNAL_ERROR';
-  const message = error instanceof AppError ? error.publicMessage : '服务暂时不可用，请稍后重试。';
+  const isStructuredError = error instanceof AppError || Boolean(
+    error
+    && Number.isInteger(error.status)
+    && typeof error.code === 'string'
+    && typeof error.publicMessage === 'string'
+  );
+  const status = isStructuredError ? error.status : 500;
+  const code = isStructuredError ? error.code : 'INTERNAL_ERROR';
+  const message = isStructuredError ? error.publicMessage : '服务暂时不可用，请稍后重试。';
   const payload = {
     ok: false,
     requestId,
@@ -137,7 +146,7 @@ export function errorResponse(request, config, requestId, error) {
       message,
     },
   };
-  if (error instanceof AppError && error.details) payload.error.details = error.details;
+  if (isStructuredError && error.details) payload.error.details = error.details;
   return new Response(JSON.stringify(payload), {
     status,
     headers: responseHeaders(request, config, requestId, 'application/json; charset=utf-8'),
@@ -402,6 +411,12 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
   if (path === '/api/admin/auth/state') {
     assertMethod(request, 'GET');
     return jsonSuccess(request, rootConfig, requestId, { auth: await getAuthState(store, rootConfig) });
+  }
+  if (path === '/api/admin/auth/health') {
+    assertMethod(request, 'GET');
+    return jsonSuccess(request, rootConfig, requestId, {
+      health: await getAuthRuntimeHealth(rootConfig),
+    });
   }
   if (path === '/api/admin/auth/setup/start') {
     assertMethod(request, 'POST');
