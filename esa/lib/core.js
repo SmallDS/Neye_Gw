@@ -245,6 +245,55 @@ function compatMac(secret, context, iv, ciphertext) {
     .digest();
 }
 
+function streamBytes(secret, context, nonce, length) {
+  const key = deriveKey(secret, 'stream:' + context);
+  const output = Buffer.alloc(length);
+  let offset = 0;
+  let counter = 0;
+  while (offset < length) {
+    const counterBytes = Buffer.from([
+      (counter >>> 24) & 255,
+      (counter >>> 16) & 255,
+      (counter >>> 8) & 255,
+      counter & 255,
+    ]);
+    const block = createHmac('sha256', key)
+      .update(nonce)
+      .update(counterBytes)
+      .digest();
+    const size = Math.min(block.length, length - offset);
+    block.copy(output, offset, 0, size);
+    offset += size;
+    counter += 1;
+  }
+  return output;
+}
+
+function xorWithStream(value, secret, context, nonce) {
+  const stream = streamBytes(secret, context, nonce, value.length);
+  const output = Buffer.alloc(value.length);
+  for (let index = 0; index < value.length; index += 1) {
+    output[index] = value[index] ^ stream[index];
+  }
+  return output;
+}
+
+function encryptJsonStream(value, secret, context) {
+  const nonce = randomBytes(16);
+  const plaintext = Buffer.from(JSON.stringify(value), 'utf8');
+  const ciphertext = xorWithStream(plaintext, secret, context, nonce);
+  const mac = compatMac(secret, context, nonce, ciphertext);
+  return ['v3', toBase64Url(nonce), toBase64Url(mac), toBase64Url(ciphertext)].join('.');
+}
+
+function decryptJsonStream(parts, secret, context) {
+  const nonce = fromBase64Url(parts[1]);
+  const ciphertext = fromBase64Url(parts[3]);
+  const expectedMac = compatMac(secret, context, nonce, ciphertext);
+  if (!constantTimeTextEqual(toBase64Url(expectedMac), parts[2])) throw new Error('invalid_mac');
+  const plaintext = xorWithStream(ciphertext, secret, context, nonce).toString('utf8');
+  return JSON.parse(plaintext);
+}
 function encryptJsonCompat(value, secret, context) {
   const iv = randomBytes(16);
   const cipher = createCipheriv('aes-256-cbc', deriveKey(secret, 'aes-cbc'), iv);
@@ -282,7 +331,11 @@ export function encryptJson(value, secret, context) {
     const tag = cipher.getAuthTag();
     return ['v1', toBase64Url(iv), toBase64Url(tag), toBase64Url(ciphertext)].join('.');
   } catch {
-    return encryptJsonCompat(value, secret, context);
+    try {
+      return encryptJsonCompat(value, secret, context);
+    } catch {
+      return encryptJsonStream(value, secret, context);
+    }
   }
 }
 
@@ -291,6 +344,7 @@ export function decryptJson(payload, secret, context) {
     const parts = String(payload || '').split('.');
     if (parts.length !== 4) throw new Error('invalid_envelope');
     if (parts[0] === 'v2') return decryptJsonCompat(parts, secret, context);
+    if (parts[0] === 'v3') return decryptJsonStream(parts, secret, context);
     if (parts[0] !== 'v1') throw new Error('invalid_envelope');
     const decipher = createDecipheriv('aes-256-gcm', deriveKey(secret, 'aes-gcm'), fromBase64Url(parts[1]));
     decipher.setAAD(Buffer.from(String(context), 'utf8'));
