@@ -7,7 +7,9 @@ import {
   buildSignContent,
   decryptJson,
   decryptJsonAsync,
+  decryptJsonPortable,
   encryptJsonAsync,
+  encryptJsonPortable,
   loadRuntimeConfig,
   readConfig,
   encodeSignedPayload,
@@ -275,12 +277,27 @@ test('ESA 环境变量直接读取映射保持可用', function () {
 });
 test('后台认证使用 ESA 兼容加密挑战与凭据', async function () {
   const encrypted = await encryptJsonAsync({ value: 'totp-secret' }, 'webcrypto-test-key', 'admin-test');
-  assert.match(encrypted, /^v[12]\./);
+  assert.match(encrypted, /^v[1-4]\./);
   assert.deepEqual(
     await decryptJsonAsync(encrypted, 'webcrypto-test-key', 'admin-test'),
     { value: 'totp-secret' },
   );
 });
+test('ESA portable crypto envelope round trip and tamper detection', function () {
+  const encrypted = encryptJsonPortable({ value: 'totp-secret' }, 'portable-test-key', 'admin-test');
+  assert.match(encrypted, /^v4\./);
+  assert.deepEqual(
+    decryptJsonPortable(encrypted.split('.'), 'portable-test-key', 'admin-test'),
+    { value: 'totp-secret' },
+  );
+  const parts = encrypted.split('.');
+  parts[2] = parts[2].slice(0, -1) + (parts[2].endsWith('a') ? 'b' : 'a');
+  assert.throws(
+    function () { decryptJsonPortable(parts, 'portable-test-key', 'admin-test'); },
+    /invalid_mac/,
+  );
+});
+
 test('ESA Edge KV 可为请求函数提供后台安全配置', async function () {
   const previous = globalThis.EdgeKV;
   class FakeEdgeKV {

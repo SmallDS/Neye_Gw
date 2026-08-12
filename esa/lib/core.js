@@ -337,6 +337,93 @@ function decryptJsonStream(parts, secret, context) {
   const plaintext = xorWithStream(ciphertext, secret, context, nonce).toString('utf8');
   return JSON.parse(plaintext);
 }
+function deriveTextKey(secret, label) {
+  if (!secret) throw new AppError(503, 'DATA_KEY_MISSING', '安全数据密钥尚未配置。');
+  return createHash('sha256').update(String(secret) + ':' + label, 'utf8').digest('hex');
+}
+
+function utf8ToHex(value) {
+  if (typeof TextEncoder !== 'function') throw new Error('text_encoder_unavailable');
+  const bytes = new TextEncoder().encode(String(value));
+  let output = '';
+  for (const byte of bytes) output += byte.toString(16).padStart(2, '0');
+  return output;
+}
+
+function hexToUtf8(value) {
+  const text = String(value || '');
+  if (!/^(?:[0-9a-f]{2})*$/i.test(text)) throw new Error('invalid_hex');
+  const bytes = new Uint8Array(text.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = parseInt(text.slice(index * 2, index * 2 + 2), 16);
+  }
+  if (typeof TextDecoder !== 'function') throw new Error('text_decoder_unavailable');
+  return new TextDecoder().decode(bytes);
+}
+
+function portableStreamHex(secret, context, nonceHex, byteLength) {
+  const key = deriveTextKey(secret, 'stream-v4:' + context);
+  let stream = '';
+  let counter = 0;
+  while (stream.length < byteLength * 2) {
+    const counterHex = counter.toString(16).padStart(8, '0');
+    stream += createHmac('sha256', key)
+      .update(nonceHex, 'utf8')
+      .update(counterHex, 'utf8')
+      .digest('hex');
+    counter += 1;
+  }
+  return stream.slice(0, byteLength * 2);
+}
+
+function xorHex(leftHex, rightHex) {
+  if (leftHex.length !== rightHex.length || leftHex.length % 2 !== 0) {
+    throw new Error('invalid_hex_length');
+  }
+  let output = '';
+  for (let index = 0; index < leftHex.length; index += 2) {
+    const value = parseInt(leftHex.slice(index, index + 2), 16)
+      ^ parseInt(rightHex.slice(index, index + 2), 16);
+    output += value.toString(16).padStart(2, '0');
+  }
+  return output;
+}
+
+function portableMacHex(secret, context, nonceHex, ciphertextHex) {
+  return createHmac('sha256', deriveTextKey(secret, 'mac-v4:' + context))
+    .update(String(context), 'utf8')
+    .update('\u0000', 'utf8')
+    .update(nonceHex, 'utf8')
+    .update('\u0000', 'utf8')
+    .update(ciphertextHex, 'utf8')
+    .digest('hex');
+}
+
+export function encryptJsonPortable(value, secret, context) {
+  if (!secret) throw new AppError(503, 'DATA_KEY_MISSING', '安全数据密钥尚未配置。');
+  const nonceHex = randomBytes(16).toString('hex');
+  const plaintextHex = utf8ToHex(JSON.stringify(value));
+  const streamHex = portableStreamHex(secret, context, nonceHex, plaintextHex.length / 2);
+  const ciphertextHex = xorHex(plaintextHex, streamHex);
+  const macHex = portableMacHex(secret, context, nonceHex, ciphertextHex);
+  return ['v4', nonceHex, macHex, ciphertextHex].join('.');
+}
+
+export function decryptJsonPortable(parts, secret, context) {
+  const nonceHex = String(parts[1] || '');
+  if (!/^[0-9a-f]{32}$/i.test(nonceHex) || !/^[0-9a-f]{64}$/i.test(String(parts[2] || ''))) {
+    throw new Error('invalid_envelope');
+  }
+  const ciphertextHex = String(parts[3] || '');
+  if (!/^(?:[0-9a-f]{2})*$/i.test(ciphertextHex)) throw new Error('invalid_hex');
+  const expectedMacHex = portableMacHex(secret, context, nonceHex, ciphertextHex);
+  if (!constantTimeTextEqual(expectedMacHex, String(parts[2]).toLowerCase())) {
+    throw new Error('invalid_mac');
+  }
+  const streamHex = portableStreamHex(secret, context, nonceHex, ciphertextHex.length / 2);
+  const plaintextHex = xorHex(ciphertextHex, streamHex);
+  return JSON.parse(hexToUtf8(plaintextHex));
+}
 function encryptJsonCompat(value, secret, context) {
   const iv = randomBytes(16);
   const cipher = createCipheriv('aes-256-cbc', deriveKey(secret, 'aes-cbc'), iv);
@@ -377,7 +464,11 @@ export function encryptJson(value, secret, context) {
     try {
       return encryptJsonCompat(value, secret, context);
     } catch {
-      return encryptJsonStream(value, secret, context);
+      try {
+        return encryptJsonPortable(value, secret, context);
+      } catch {
+        return encryptJsonStream(value, secret, context);
+      }
     }
   }
 }
@@ -387,6 +478,7 @@ export function decryptJson(payload, secret, context) {
     const parts = String(payload || '').split('.');
     if (parts.length !== 4) throw new Error('invalid_envelope');
     if (parts[0] === 'v2') return decryptJsonCompat(parts, secret, context);
+    if (parts[0] === 'v4') return decryptJsonPortable(parts, secret, context);
     if (parts[0] === 'v3') return decryptJsonStream(parts, secret, context);
     if (parts[0] !== 'v1') throw new Error('invalid_envelope');
     const decipher = createDecipheriv('aes-256-gcm', deriveKey(secret, 'aes-gcm'), fromBase64Url(parts[1]));
