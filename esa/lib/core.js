@@ -303,7 +303,9 @@ function streamBytes(secret, context, nonce, length) {
       .update(counterBytes)
       .digest();
     const size = Math.min(block.length, length - offset);
-    block.copy(output, offset, 0, size);
+    for (let index = 0; index < size; index += 1) {
+      output[offset + index] = block[index];
+    }
     offset += size;
     counter += 1;
   }

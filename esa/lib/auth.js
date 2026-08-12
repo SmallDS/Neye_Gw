@@ -195,6 +195,19 @@ export async function getAuthState(store, config) {
   };
 }
 
+function setupFailure(stage, error) {
+  if (error instanceof AppError) return error;
+  return new AppError(503, 'ADMIN_SETUP_STAGE_FAILED', '管理后台初始化暂时不可用。', { stage: stage });
+}
+
+async function runSetupStage(stage, action) {
+  try {
+    return await action();
+  } catch (error) {
+    throw setupFailure(stage, error);
+  }
+}
+
 async function startChallenge(store, config, request, input, mode) {
   requireAdminConfig(config, mode);
   const rate = await consumeRate(store, config, request, mode + '_start', {
@@ -202,7 +215,9 @@ async function startChallenge(store, config, request, input, mode) {
     windowMs: 10 * 60 * 1000,
     lockMs: 20 * 60 * 1000,
   });
-  const existing = await store.getJson(ADMIN_AUTH_KEY);
+  const existing = await runSetupStage('auth_read', function () {
+    return store.getJson(ADMIN_AUTH_KEY);
+  });
   if (mode === 'setup' && existing) {
     throw new AppError(409, 'ADMIN_ALREADY_CONFIGURED', '管理员动态验证已经绑定。');
   }
@@ -211,18 +226,33 @@ async function startChallenge(store, config, request, input, mode) {
   }
   verifyToken(input.token, mode === 'setup' ? config.adminSetupToken : config.adminResetToken);
 
-  const id = randomId('', 12);
-  const secret = createSecret();
+  let id;
+  let secret;
+  try {
+    id = randomId('', 12);
+    secret = createSecret();
+  } catch (error) {
+    throw setupFailure('challenge_generate', error);
+  }
+
+  const secretCipher = await runSetupStage('challenge_encrypt', function () {
+    return encryptJsonAsync({ value: secret }, config.adminDataKey, challengeKey(id));
+  });
+  const fingerprint = await runSetupStage('fingerprint', function () {
+    return clientFingerprint(request, config);
+  });
   const challenge = {
     id,
     mode,
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-    secretCipher: await encryptJsonAsync({ value: secret }, config.adminDataKey, challengeKey(id)),
-    fingerprint: clientFingerprint(request, config),
+    secretCipher,
+    fingerprint,
   };
-  await store.putJson(challengeKey(id), challenge);
-  if (rate) await store.delete(rate);
+  await runSetupStage('challenge_write', function () {
+    return store.putJson(challengeKey(id), challenge);
+  });
+  if (rate) await runSetupStage('rate_cleanup', function () { return store.delete(rate); });
   return {
     challengeId: id,
     secret,
