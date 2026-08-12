@@ -6,7 +6,7 @@
 
 - 原生 HTML、CSS、JavaScript，无前端构建步骤。
 - ESA Functions 处理订单、支付宝接口、TOTP 管理认证和 Webhook。
-- ESA Edge KV 保存 v2_ 数据；联系人、备注、TOTP 密钥和支付配置使用 AES-GCM 加密。
+- ESA Edge KV 保存 v2_ 数据；联系人、备注、TOTP 密钥和支付配置使用加密信封；优先 AES-GCM，ESA 受限运行时使用 AES-256-CBC + HMAC-SHA256 兼容路径。
 - 支付宝 AI 网页应用付款采用 fetch + node:crypto 实现 RSA2 协议，不把完整 Node SDK 作为线上依赖。
 - 月付和年付均为一次付款购买一个自然月或一个自然年，不自动续费。
 

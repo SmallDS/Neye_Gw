@@ -237,22 +237,61 @@ function fromBase64Url(value) {
   return Buffer.from(text + '='.repeat((4 - (text.length % 4)) % 4), 'base64');
 }
 
-export function encryptJson(value, secret, context) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', deriveKey(secret, 'aes-gcm'), iv);
-  cipher.setAAD(Buffer.from(String(context), 'utf8'));
+function compatMac(secret, context, iv, ciphertext) {
+  return createHmac('sha256', deriveKey(secret, 'mac:' + context))
+    .update(String(context), 'utf8')
+    .update(iv)
+    .update(ciphertext)
+    .digest();
+}
+
+function encryptJsonCompat(value, secret, context) {
+  const iv = randomBytes(16);
+  const cipher = createCipheriv('aes-256-cbc', deriveKey(secret, 'aes-cbc'), iv);
   const ciphertext = Buffer.concat([
     cipher.update(JSON.stringify(value), 'utf8'),
     cipher.final(),
   ]);
-  const tag = cipher.getAuthTag();
-  return ['v1', toBase64Url(iv), toBase64Url(tag), toBase64Url(ciphertext)].join('.');
+  const mac = compatMac(secret, context, iv, ciphertext);
+  return ['v2', toBase64Url(iv), toBase64Url(mac), toBase64Url(ciphertext)].join('.');
+}
+
+function decryptJsonCompat(parts, secret, context) {
+  const iv = fromBase64Url(parts[1]);
+  const ciphertext = fromBase64Url(parts[3]);
+  const expectedMac = compatMac(secret, context, iv, ciphertext);
+  if (!constantTimeTextEqual(toBase64Url(expectedMac), parts[2])) throw new Error('invalid_mac');
+  const decipher = createDecipheriv('aes-256-cbc', deriveKey(secret, 'aes-cbc'), iv);
+  const plaintext = Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]).toString('utf8');
+  return JSON.parse(plaintext);
+}
+
+export function encryptJson(value, secret, context) {
+  if (!secret) throw new AppError(503, 'DATA_KEY_MISSING', '安全数据密钥尚未配置。');
+  try {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', deriveKey(secret, 'aes-gcm'), iv);
+    cipher.setAAD(Buffer.from(String(context), 'utf8'));
+    const ciphertext = Buffer.concat([
+      cipher.update(JSON.stringify(value), 'utf8'),
+      cipher.final(),
+    ]);
+    const tag = cipher.getAuthTag();
+    return ['v1', toBase64Url(iv), toBase64Url(tag), toBase64Url(ciphertext)].join('.');
+  } catch {
+    return encryptJsonCompat(value, secret, context);
+  }
 }
 
 export function decryptJson(payload, secret, context) {
   try {
     const parts = String(payload || '').split('.');
-    if (parts.length !== 4 || parts[0] !== 'v1') throw new Error('invalid_envelope');
+    if (parts.length !== 4) throw new Error('invalid_envelope');
+    if (parts[0] === 'v2') return decryptJsonCompat(parts, secret, context);
+    if (parts[0] !== 'v1') throw new Error('invalid_envelope');
     const decipher = createDecipheriv('aes-256-gcm', deriveKey(secret, 'aes-gcm'), fromBase64Url(parts[1]));
     decipher.setAAD(Buffer.from(String(context), 'utf8'));
     decipher.setAuthTag(fromBase64Url(parts[2]));
@@ -266,76 +305,12 @@ export function decryptJson(payload, secret, context) {
   }
 }
 
-function asArrayBuffer(value) {
-  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-}
-
 export async function encryptJsonAsync(value, secret, context) {
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) return encryptJson(value, secret, context);
-  try {
-    const iv = new Uint8Array(randomBytes(12));
-    const key = await subtle.importKey(
-      'raw',
-      asArrayBuffer(deriveKey(secret, 'aes-gcm')),
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt'],
-    );
-    const encrypted = new Uint8Array(await subtle.encrypt(
-      {
-        name: 'AES-GCM',
-        iv: asArrayBuffer(iv),
-        additionalData: asArrayBuffer(Buffer.from(String(context), 'utf8')),
-        tagLength: 128,
-      },
-      key,
-      asArrayBuffer(Buffer.from(JSON.stringify(value), 'utf8')),
-    ));
-    const tag = encrypted.slice(encrypted.length - 16);
-    const ciphertext = encrypted.slice(0, encrypted.length - 16);
-    return ['v2', toBase64Url(iv), toBase64Url(tag), toBase64Url(ciphertext)].join('.');
-  } catch {
-    try {
-      return encryptJson(value, secret, context);
-    } catch {
-      throw new AppError(503, 'ENCRYPTED_DATA_UNAVAILABLE', '加密服务暂时不可用。');
-    }
-  }
+  return encryptJson(value, secret, context);
 }
 
 export async function decryptJsonAsync(payload, secret, context) {
-  const parts = String(payload || '').split('.');
-  if (parts[0] === 'v1') return decryptJson(payload, secret, context);
-  if (parts.length !== 4 || parts[0] !== 'v2') {
-    throw new AppError(503, 'ENCRYPTED_DATA_INVALID', '加密数据暂时无法读取。');
-  }
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) throw new AppError(503, 'ENCRYPTED_DATA_UNAVAILABLE', '加密服务暂时不可用。');
-  try {
-    const key = await subtle.importKey(
-      'raw',
-      asArrayBuffer(deriveKey(secret, 'aes-gcm')),
-      { name: 'AES-GCM' },
-      false,
-      ['decrypt'],
-    );
-    const combined = Buffer.concat([fromBase64Url(parts[3]), fromBase64Url(parts[2])]);
-    const plaintext = await subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: asArrayBuffer(fromBase64Url(parts[1])),
-        additionalData: asArrayBuffer(Buffer.from(String(context), 'utf8')),
-        tagLength: 128,
-      },
-      key,
-      asArrayBuffer(combined),
-    );
-    return JSON.parse(Buffer.from(plaintext).toString('utf8'));
-  } catch {
-    throw new AppError(503, 'ENCRYPTED_DATA_INVALID', '加密数据暂时无法读取。');
-  }
+  return decryptJson(payload, secret, context);
 }
 export function encodeSignedPayload(value, secret) {
   const encoded = toBase64Url(Buffer.from(JSON.stringify(value), 'utf8'));
