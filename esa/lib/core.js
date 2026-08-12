@@ -86,6 +86,29 @@ export function readConfig() {
 
 export const RUNTIME_CONFIG_KEY = 'v2_runtime_config';
 
+const RUNTIME_CONFIG_CACHE_MS = 30 * 1000;
+const KV_RETRY_ATTEMPTS = 3;
+const KV_RETRY_DELAY_MS = 50;
+let runtimeConfigCache = null;
+
+function waitForKvRetry(milliseconds) {
+  return new Promise(function (resolve) { setTimeout(resolve, milliseconds); });
+}
+
+async function withKvRetry(action) {
+  let lastError;
+  for (let attempt = 0; attempt < KV_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+      if (attempt === KV_RETRY_ATTEMPTS - 1) throw error;
+      await waitForKvRetry(KV_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 function runtimeConfigValue(record, key) {
   const value = record && typeof record === 'object' ? record[key] : '';
   return typeof value === 'string' && value.trim() ? value.trim() : '';
@@ -101,14 +124,32 @@ export async function loadRuntimeConfig(config) {
   if (requiredFields.every(function (pair) { return config[pair[0]]; })) return config;
   if (typeof globalThis.EdgeKV !== 'function') return config;
 
+  const namespace = config.kvNamespace || 'neye-orders';
+  if (runtimeConfigCache
+    && runtimeConfigCache.namespace === namespace
+    && runtimeConfigCache.expiresAt > Date.now()) {
+    return Object.assign({}, config, runtimeConfigCache.values, { runtimeConfigSource: 'edge-kv-cache' });
+  }
+
   try {
-    const client = new globalThis.EdgeKV({ namespace: config.kvNamespace || 'neye-orders' });
-    const raw = await client.get(RUNTIME_CONFIG_KEY, { type: 'text' });
+    const client = new globalThis.EdgeKV({ namespace: namespace });
+    const raw = await withKvRetry(function () {
+      return client.get(RUNTIME_CONFIG_KEY, { type: 'text' });
+    });
     if (!raw) return config;
     const record = typeof raw === 'string' ? JSON.parse(raw) : raw;
     const resolved = Object.assign({}, config);
     for (const [field, key] of requiredFields) {
       if (!resolved[field]) resolved[field] = runtimeConfigValue(record, key);
+    }
+    if (requiredFields.every(function (pair) { return resolved[pair[0]]; })) {
+      const values = {};
+      for (const [field] of requiredFields) values[field] = resolved[field];
+      runtimeConfigCache = {
+        namespace: namespace,
+        values: values,
+        expiresAt: Date.now() + RUNTIME_CONFIG_CACHE_MS,
+      };
     }
     return Object.assign(resolved, { runtimeConfigSource: 'edge-kv' });
   } catch {
@@ -610,13 +651,13 @@ export class KvStore {
   }
 
   async getText(key) {
-    const value = await this.client.get(key, { type: 'text' });
+    const value = await withKvRetry(() => this.client.get(key, { type: 'text' }));
     if (value === undefined || value === null || value === '') return null;
     return typeof value === 'string' ? value : JSON.stringify(value);
   }
 
   async getJson(key) {
-    const value = await this.client.get(key, { type: 'text' });
+    const value = await withKvRetry(() => this.client.get(key, { type: 'text' }));
     if (value === undefined || value === null || value === '') return null;
     if (typeof value === 'object') return value;
     try {
@@ -627,15 +668,15 @@ export class KvStore {
   }
 
   async putJson(key, value) {
-    await this.client.put(key, JSON.stringify(value));
+    await withKvRetry(() => this.client.put(key, JSON.stringify(value)));
   }
 
   async putText(key, value) {
-    await this.client.put(key, String(value));
+    await withKvRetry(() => this.client.put(key, String(value)));
   }
 
   async delete(key) {
-    if (typeof this.client.delete === 'function') await this.client.delete(key);
+    if (typeof this.client.delete === 'function') await withKvRetry(() => this.client.delete(key));
   }
 
   async appendIndex(key, id, maxItems = 5000) {
