@@ -54,19 +54,27 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 
 参考：[ESA Edge KV 快速入门](https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/get-started-with-edge-kv)
 
-## 环境变量
+## 环境变量与后台安全配置
 
-必须留在 ESA 控制台的根变量只有 5 个：
+ESA Pages 控制台中的“构建信息 > 环境变量”主要提供给构建过程使用。当前这个项目的线上请求函数无法从该处读取后台安全变量，因此只填写截图中的变量会导致 `/api/admin/auth/state` 仍返回 `setupAvailable: false`。
 
-| 变量 | 用途 |
-| --- | --- |
-| ESA_KV_NAMESPACE | Edge KV 命名空间，例如 neye-orders |
-| ADMIN_SETUP_TOKEN | 首次绑定 TOTP 的高强度随机令牌 |
-| ADMIN_RESET_TOKEN | 丢失验证器时重新绑定的独立高强度随机令牌 |
-| ADMIN_DATA_KEY | AES-GCM 与联系人 HMAC 的高强度随机密钥 |
-| ADMIN_SESSION_SECRET | 8 小时管理会话的高强度随机签名密钥 |
+本项目现在优先读取运行时环境变量；如果 ESA 请求函数没有提供这些变量，就从同一 Edge KV 命名空间读取受保护的运行时配置。请在 ESA 控制台的“边缘计算与 AI > KV 存储”中，在 `neye-orders` 命名空间创建以下键：
 
-这 5 个变量负责解密、身份验证与会话签名，不能放进网页设置。`ADMIN_DATA_KEY` 部署后不要直接更换，否则已有加密数据将无法读取，订阅用户标识也会变化。
+- 键名：`v2_runtime_config`
+- 值：原始 JSON，不要再套一层引号，不要填写 Markdown 代码围栏
+
+```json
+{
+  "ADMIN_SETUP_TOKEN": "在本地粘贴你的 ADMIN_SETUP_TOKEN",
+  "ADMIN_RESET_TOKEN": "在本地粘贴你的 ADMIN_RESET_TOKEN",
+  "ADMIN_DATA_KEY": "在本地粘贴你的 ADMIN_DATA_KEY",
+  "ADMIN_SESSION_SECRET": "在本地粘贴你的 ADMIN_SESSION_SECRET"
+}
+```
+
+上面四个值只在 ESA KV 控制台填写，不要发送给我，不要写入 Git、HTML、浏览器脚本、构建日志或普通运行日志。`ADMIN_SETUP_TOKEN` 与 `ADMIN_RESET_TOKEN` 必须不同；`ADMIN_DATA_KEY` 部署后不要更换，否则已有加密数据无法读取，订阅用户标识也会变化。截图中已有的 `ESA_KV_NAMESPACE=neye-orders` 可以保留；如果请求函数读不到它，代码默认也会使用 `neye-orders`。
+
+KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/`。调用 `/api/admin/auth/state` 时，预期是 `setupAvailable: true`、`resetAvailable: true`；首次尚未绑定 TOTP 时 `configured: false` 是正常的。Edge KV 是最终一致存储，通常数秒内同步，官方文档说明最长可能需要 300 秒。
 
 支付宝收款参数在 `/admin/` 的“支付配置”中维护：
 
@@ -77,7 +85,17 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 
 页面只返回配置状态和密钥指纹。密钥输入框始终为空，留空保存表示保留当前密钥；每次保存都需要一个未使用过的 6 位 TOTP。登录时刚使用的验证码不能重复用于改配置，必要时等待下一组验证码。
 
-为兼容旧部署，以下 ESA 变量仍可作为首次迁移兜底；后台成功保存后以 Edge KV 中的加密配置为准，这些支付变量即可从 ESA 移除：
+为兼容其他 ESA 运行时，以下变量仍可作为环境变量读取；在当前 Pages 部署中，后台安全配置以运行时 KV 记录为准：
+
+| 变量 | 用途 |
+| --- | --- |
+| ESA_KV_NAMESPACE | Edge KV 命名空间，当前使用 `neye-orders` |
+| ADMIN_SETUP_TOKEN | 首次绑定 TOTP 的高强度随机令牌 |
+| ADMIN_RESET_TOKEN | 丢失验证器时重新绑定的独立高强度随机令牌 |
+| ADMIN_DATA_KEY | AES-GCM 与联系人 HMAC 的高强度随机密钥 |
+| ADMIN_SESSION_SECRET | 8 小时管理会话的高强度随机签名密钥 |
+
+旧部署仍可使用以下支付宝变量作为支付配置迁移兜底；正常情况下支付参数保存到后台后以 Edge KV 中的加密配置为准：
 
 | 变量 | 兼容用途 |
 | --- | --- |
@@ -93,11 +111,9 @@ Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文
 安全要求：
 
 - 不要把任何变量值写入 Git、HTML、浏览器脚本、构建日志或普通运行日志。
-- ADMIN_SETUP_TOKEN 与 ADMIN_RESET_TOKEN 必须不同。
 - 4 个管理员安全值建议分别使用至少 32 字节随机值。
 - AIPAY_PUBLIC_KEY 是应用公钥，不是验签所需的支付宝公钥；运行时使用 AIPAY_ALIPAY_PUBLIC_KEY。
 - 之前在聊天中出现过的应用私钥已视为泄露。沙箱和正式环境都必须重新生成应用密钥，并在支付宝开放平台重新匹配应用公钥后再部署。
-
 ## 首次进入后台
 
 1. 发布完成后打开 https://www.smallds.icu/admin/。

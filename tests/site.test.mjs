@@ -6,6 +6,7 @@ import {
   amountToFen,
   buildSignContent,
   decryptJson,
+  loadRuntimeConfig,
   readConfig,
   encodeSignedPayload,
   encryptJson,
@@ -268,6 +269,42 @@ test('ESA 环境变量直接读取映射保持可用', function () {
       if (previous[name] === undefined) delete process.env[name];
       else process.env[name] = previous[name];
     }
+  }
+});
+test('ESA Edge KV 可为请求函数提供后台安全配置', async function () {
+  const previous = globalThis.EdgeKV;
+  class FakeEdgeKV {
+    constructor(options) {
+      assert.equal(options.namespace, 'neye-orders');
+    }
+
+    async get(key) {
+      assert.equal(key, 'v2_runtime_config');
+      return JSON.stringify({
+        ADMIN_SETUP_TOKEN: 'setup-from-kv',
+        ADMIN_RESET_TOKEN: 'reset-from-kv',
+        ADMIN_DATA_KEY: 'data-from-kv',
+        ADMIN_SESSION_SECRET: 'session-from-kv',
+      });
+    }
+  }
+  globalThis.EdgeKV = FakeEdgeKV;
+  try {
+    const config = await loadRuntimeConfig(testConfig({
+      kvNamespace: 'neye-orders',
+      adminSetupToken: '',
+      adminResetToken: '',
+      adminDataKey: '',
+      adminSessionSecret: '',
+    }));
+    assert.equal(config.adminSetupToken, 'setup-from-kv');
+    assert.equal(config.adminResetToken, 'reset-from-kv');
+    assert.equal(config.adminDataKey, 'data-from-kv');
+    assert.equal(config.adminSessionSecret, 'session-from-kv');
+    assert.equal(config.runtimeConfigSource, 'edge-kv');
+  } finally {
+    if (previous === undefined) delete globalThis.EdgeKV;
+    else globalThis.EdgeKV = previous;
   }
 });
 test('支付宝请求签名包含 sign_type，响应验签覆盖原始 JSON', function () {

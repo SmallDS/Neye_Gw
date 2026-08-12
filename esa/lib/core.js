@@ -84,6 +84,38 @@ export function readConfig() {
   };
 }
 
+export const RUNTIME_CONFIG_KEY = 'v2_runtime_config';
+
+function runtimeConfigValue(record, key) {
+  const value = record && typeof record === 'object' ? record[key] : '';
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+export async function loadRuntimeConfig(config) {
+  const requiredFields = [
+    ['adminSetupToken', 'ADMIN_SETUP_TOKEN'],
+    ['adminResetToken', 'ADMIN_RESET_TOKEN'],
+    ['adminDataKey', 'ADMIN_DATA_KEY'],
+    ['adminSessionSecret', 'ADMIN_SESSION_SECRET'],
+  ];
+  if (requiredFields.every(function (pair) { return config[pair[0]]; })) return config;
+  if (typeof globalThis.EdgeKV !== 'function') return config;
+
+  try {
+    const client = new globalThis.EdgeKV({ namespace: config.kvNamespace || 'neye-orders' });
+    const raw = await client.get(RUNTIME_CONFIG_KEY, { type: 'text' });
+    if (!raw) return config;
+    const record = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const resolved = Object.assign({}, config);
+    for (const [field, key] of requiredFields) {
+      if (!resolved[field]) resolved[field] = runtimeConfigValue(record, key);
+    }
+    return Object.assign(resolved, { runtimeConfigSource: 'edge-kv' });
+  } catch {
+    return config;
+  }
+}
+
 export function requirePaymentConfig(config) {
   const missing = [];
   if (!config.appId) missing.push('AIPAY_APP_ID');
