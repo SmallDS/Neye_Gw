@@ -266,6 +266,68 @@ export function decryptJson(payload, secret, context) {
   }
 }
 
+export async function encryptJsonAsync(value, secret, context) {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return encryptJson(value, secret, context);
+  try {
+    const iv = randomBytes(12);
+    const key = await subtle.importKey(
+      'raw',
+      deriveKey(secret, 'aes-gcm'),
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt'],
+    );
+    const encrypted = Buffer.from(await subtle.encrypt(
+      {
+        name: 'AES-GCM',
+        iv,
+        additionalData: Buffer.from(String(context), 'utf8'),
+        tagLength: 128,
+      },
+      key,
+      Buffer.from(JSON.stringify(value), 'utf8'),
+    ));
+    const tag = encrypted.subarray(encrypted.length - 16);
+    const ciphertext = encrypted.subarray(0, encrypted.length - 16);
+    return ['v2', toBase64Url(iv), toBase64Url(tag), toBase64Url(ciphertext)].join('.');
+  } catch {
+    throw new AppError(503, 'ENCRYPTED_DATA_UNAVAILABLE', '加密服务暂时不可用。');
+  }
+}
+
+export async function decryptJsonAsync(payload, secret, context) {
+  const parts = String(payload || '').split('.');
+  if (parts[0] === 'v1') return decryptJson(payload, secret, context);
+  if (parts.length !== 4 || parts[0] !== 'v2') {
+    throw new AppError(503, 'ENCRYPTED_DATA_INVALID', '加密数据暂时无法读取。');
+  }
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new AppError(503, 'ENCRYPTED_DATA_UNAVAILABLE', '加密服务暂时不可用。');
+  try {
+    const key = await subtle.importKey(
+      'raw',
+      deriveKey(secret, 'aes-gcm'),
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt'],
+    );
+    const combined = Buffer.concat([fromBase64Url(parts[3]), fromBase64Url(parts[2])]);
+    const plaintext = await subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: fromBase64Url(parts[1]),
+        additionalData: Buffer.from(String(context), 'utf8'),
+        tagLength: 128,
+      },
+      key,
+      combined,
+    );
+    return JSON.parse(Buffer.from(plaintext).toString('utf8'));
+  } catch {
+    throw new AppError(503, 'ENCRYPTED_DATA_INVALID', '加密数据暂时无法读取。');
+  }
+}
 export function encodeSignedPayload(value, secret) {
   const encoded = toBase64Url(Buffer.from(JSON.stringify(value), 'utf8'));
   return encoded + '.' + toBase64Url(createHmac('sha256', deriveKey(secret, 'session')).update(encoded).digest());

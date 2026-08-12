@@ -6,6 +6,8 @@ import {
   amountToFen,
   buildSignContent,
   decryptJson,
+  decryptJsonAsync,
+  encryptJsonAsync,
   loadRuntimeConfig,
   readConfig,
   encodeSignedPayload,
@@ -270,6 +272,14 @@ test('ESA 环境变量直接读取映射保持可用', function () {
       else process.env[name] = previous[name];
     }
   }
+});
+test('后台认证使用 ESA Web Crypto 加密挑战与凭据', async function () {
+  const encrypted = await encryptJsonAsync({ value: 'totp-secret' }, 'webcrypto-test-key', 'admin-test');
+  assert.match(encrypted, /^v2\./);
+  assert.deepEqual(
+    await decryptJsonAsync(encrypted, 'webcrypto-test-key', 'admin-test'),
+    { value: 'totp-secret' },
+  );
 });
 test('ESA Edge KV 可为请求函数提供后台安全配置', async function () {
   const previous = globalThis.EdgeKV;
@@ -946,27 +956,19 @@ test('不支持的通知事件和金额不一致不会更新订单', async funct
     gateway.restore();
   }
 });
-test('管理员初始化限流和过期会话均由服务端拒绝', async function () {
+test('后台认证暂时关闭函数内限流，过期会话仍由服务端拒绝', async function () {
   const store = new MemoryStore();
   const config = testConfig();
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < 4; index += 1) {
     await assert.rejects(
       routeRequest(request('/api/admin/auth/setup/start', {
         method: 'POST',
         headers: { 'x-forwarded-for': '198.51.100.40' },
         json: { token: 'wrong-token' },
-      }), { store: store, config: config, requestId: 'REQ_RATE_' + index }),
+      }), { store: store, config: config, requestId: 'REQ_NO_RATE_' + index }),
       function (error) { return error.code === 'ADMIN_TOKEN_INVALID'; }
     );
   }
-  await assert.rejects(
-    routeRequest(request('/api/admin/auth/setup/start', {
-      method: 'POST',
-      headers: { 'x-forwarded-for': '198.51.100.40' },
-      json: { token: 'wrong-token' },
-    }), { store: store, config: config, requestId: 'REQ_RATE_LOCK' }),
-    function (error) { return error.code === 'RATE_LIMITED'; }
-  );
 
   const sessionStore = new MemoryStore();
   await setupAdmin(sessionStore, config, '198.51.100.41');

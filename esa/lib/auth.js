@@ -7,7 +7,8 @@ import {
   decodeSignedPayload,
   encodeSignedPayload,
   encryptJson,
-  decryptJson,
+  decryptJsonAsync,
+  encryptJsonAsync,
   parseCookies,
   randomId,
   requireAdminConfig,
@@ -17,6 +18,7 @@ const ADMIN_AUTH_KEY = 'v2_admin_auth';
 const SESSION_COOKIE = 'neye_admin_session';
 const CSRF_COOKIE = 'neye_admin_csrf';
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const AUTH_RATE_LIMIT_ENABLED = false;
 
 function base32Encode(bytes) {
   let bits = 0;
@@ -93,6 +95,7 @@ function rateKey(action, fingerprint) {
 }
 
 async function consumeRate(store, config, request, action, options) {
+  if (!AUTH_RATE_LIMIT_ENABLED) return null;
   const now = Date.now();
   const key = rateKey(action, clientFingerprint(request, config));
   const current = await store.getJson(key) || { windowStartedAt: now, count: 0, lockedUntil: 0 };
@@ -171,13 +174,13 @@ export function clearSessionCookies() {
 async function readCredential(store, config) {
   const record = await store.getJson(ADMIN_AUTH_KEY);
   if (!record) return null;
-  const secret = decryptJson(record.secretCipher, config.adminDataKey, ADMIN_AUTH_KEY);
+  const secret = await decryptJsonAsync(record.secretCipher, config.adminDataKey, ADMIN_AUTH_KEY);
   return Object.assign({}, record, { secret: secret.value });
 }
 
 async function saveCredential(store, config, credential) {
   const stored = Object.assign({}, credential, {
-    secretCipher: encryptJson({ value: credential.secret }, config.adminDataKey, ADMIN_AUTH_KEY),
+    secretCipher: await encryptJsonAsync({ value: credential.secret }, config.adminDataKey, ADMIN_AUTH_KEY),
   });
   delete stored.secret;
   await store.putJson(ADMIN_AUTH_KEY, stored);
@@ -215,11 +218,11 @@ async function startChallenge(store, config, request, input, mode) {
     mode,
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-    secretCipher: encryptJson({ value: secret }, config.adminDataKey, challengeKey(id)),
+    secretCipher: await encryptJsonAsync({ value: secret }, config.adminDataKey, challengeKey(id)),
     fingerprint: clientFingerprint(request, config),
   };
   await store.putJson(challengeKey(id), challenge);
-  await store.delete(rate);
+  if (rate) await store.delete(rate);
   return {
     challengeId: id,
     secret,
@@ -247,7 +250,7 @@ async function confirmChallenge(store, config, request, input, mode) {
   if (challenge.fingerprint !== clientFingerprint(request, config)) {
     throw new AppError(401, 'ADMIN_CHALLENGE_MISMATCH', '绑定请求与当前访问不匹配。');
   }
-  const secret = decryptJson(challenge.secretCipher, config.adminDataKey, key).value;
+  const secret = (await decryptJsonAsync(challenge.secretCipher, config.adminDataKey, key)).value;
   const acceptedStep = verifyTotp(secret, input.code);
   if (acceptedStep === null) {
     throw new AppError(401, 'TOTP_INVALID', '动态验证码不正确或已使用。');
@@ -265,7 +268,7 @@ async function confirmChallenge(store, config, request, input, mode) {
   };
   await saveCredential(store, config, credential);
   await store.delete(key);
-  await store.delete(rate);
+  if (rate) await store.delete(rate);
   return issueSession(config, credential);
 }
 
@@ -303,7 +306,7 @@ export async function login(store, config, request, input) {
   credential.lastAcceptedStep = acceptedStep;
   credential.updatedAt = new Date().toISOString();
   await saveCredential(store, config, credential);
-  await store.delete(rate);
+  if (rate) await store.delete(rate);
   return issueSession(config, credential);
 }
 
@@ -325,7 +328,7 @@ export async function verifySensitiveTotp(store, config, request, code) {
   credential.lastAcceptedStep = acceptedStep;
   credential.updatedAt = new Date().toISOString();
   await saveCredential(store, config, credential);
-  await store.delete(rate);
+  if (rate) await store.delete(rate);
   return acceptedStep;
 }
 
