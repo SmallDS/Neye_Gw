@@ -36,6 +36,7 @@ import {
 import { updatePlanConfig } from '../esa/lib/plans.js';
 import {
   emitSubscriptionEvent,
+  listWebhooks,
   retryWebhook,
 } from '../esa/lib/webhook.js';
 
@@ -359,32 +360,15 @@ test('ESA Edge KV 索引读取限制并发并保持去重顺序', async function
   }
 });
 
-test('临时运行时深度检查覆盖后台读取链路且不返回业务数据', async function () {
-  const store = new MemoryStore();
-  const response = await routeRequest(request('/api/system/runtime-check-20260813'), {
-    store: store,
-    config: testConfig(),
-    requestId: 'REQ_RUNTIME_CHECK',
-  });
-  const body = await payload(response);
-  assert.equal(response.status, 200);
-  assert.equal(body.ready, true);
-  assert.deepEqual(Object.keys(body.checks).sort(), [
-    'audit',
-    'authSession',
-    'dashboard',
-    'kvRead',
-    'orders',
-    'paymentConfig',
-    'plans',
-    'subscribers',
-    'webhooks',
-  ]);
-  assert.equal(JSON.stringify(body).includes('contact'), false);
-  assert.equal(JSON.stringify(body).includes('recentOrders'), false);
-  assert.equal(JSON.stringify(body).includes('adminPassword'), false);
-  assert.equal(JSON.stringify(body).includes('adminSessionSecret'), false);
-  assert.equal(JSON.stringify(body).includes('adminDataKey'), false);
+test('临时运行时诊断接口已从正式版本移除', async function () {
+  await assert.rejects(
+    routeRequest(request('/api/system/runtime-check-20260813'), {
+      store: new MemoryStore(),
+      config: testConfig(),
+      requestId: 'REQ_REMOVED_RUNTIME_CHECK',
+    }),
+    function (error) { return error.code === 'NOT_FOUND'; }
+  );
 });
 
 test('后台概览只读取一轮订单索引和一轮订阅索引', async function () {
@@ -1082,6 +1066,39 @@ test('套餐快照、支付确认、通知幂等、续期、退款、退款查�
     assert.equal(dashboardBody.dashboard.metrics.grossFen, 2180);
     assert.equal(dashboardBody.dashboard.metrics.refundedFen, 10099);
     assert.equal(dashboardBody.dataSync.eventual, true);
+
+    const orderList = await routeRequest(adminRequest('/api/admin/orders?limit=20', admin), {
+      store: store,
+      config: config,
+      requestId: 'REQ_ORDER_LIST',
+    });
+    const orderListBody = await payload(orderList);
+    assert.ok(orderListBody.orders.total >= 4);
+    assert.ok(orderListBody.orders.items.some(function (item) {
+      return item.id === monthlyCreated.order.id && item.paymentStatus === 'paid';
+    }));
+
+    const subscriberList = await routeRequest(adminRequest('/api/admin/subscribers?limit=20', admin), {
+      store: store,
+      config: config,
+      requestId: 'REQ_SUBSCRIBER_LIST',
+    });
+    const subscriberListBody = await payload(subscriberList);
+    assert.ok(subscriberListBody.subscribers.total >= 2);
+    assert.ok(subscriberListBody.subscribers.items.some(function (item) {
+      return item.id === monthlyRecord.subscriberId;
+    }));
+
+    const auditList = await routeRequest(adminRequest('/api/admin/audit?limit=50', admin), {
+      store: store,
+      config: config,
+      requestId: 'REQ_AUDIT_LIST',
+    });
+    const auditListBody = await payload(auditList);
+    assert.ok(auditListBody.audit.total > 0);
+    assert.ok(auditListBody.audit.items.some(function (item) {
+      return item.action === 'plans.update';
+    }));
   } finally {
     gateway.restore();
   }
@@ -1228,6 +1245,16 @@ test('订阅 Webhook 使用时间戳 HMAC 签名，失败可在后台重试且�
     assert.equal(retried.status, 'delivered');
     assert.equal(retried.attempts, 2);
     assert.equal(retried.lastError, '');
+
+    const listed = await listWebhooks(store, {
+      from: new Date(Date.now() - 86400000),
+      to: new Date(Date.now() + 86400000),
+      limit: 10,
+      cursor: 0,
+      status: '',
+    });
+    assert.equal(listed.total, 1);
+    assert.equal(listed.items[0].status, 'delivered');
   } finally {
     globalThis.fetch = originalFetch;
   }

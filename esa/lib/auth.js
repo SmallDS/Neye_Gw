@@ -139,22 +139,6 @@ export async function getAuthState(_store, config) {
   };
 }
 
-export function checkAuthRuntime(config) {
-  requireAdminConfig(config);
-  const issued = issueSession(config);
-  const sessionCookie = issued.cookies[0].split(';', 1)[0];
-  const separator = sessionCookie.indexOf('=');
-  const token = separator >= 0 ? decodeURIComponent(sessionCookie.slice(separator + 1)) : '';
-  const decoded = decodeSignedPayload(token, config.adminSessionSecret);
-  if (!decoded
-    || decoded.csrf !== issued.csrfToken
-    || decoded.version !== issued.session.version
-    || decoded.expiresAt !== issued.session.expiresAt) {
-    throw new AppError(503, 'ADMIN_SESSION_SELF_CHECK_FAILED', '管理会话运行时自检失败。');
-  }
-  return true;
-}
-
 export async function login(store, config, request, input) {
   requireAdminConfig(config);
   const rate = await consumeRate(store, config, request, 'login', {
