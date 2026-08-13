@@ -382,6 +382,9 @@ test('临时运行时深度检查覆盖后台读取链路且不返回业务数�
   ]);
   assert.equal(JSON.stringify(body).includes('contact'), false);
   assert.equal(JSON.stringify(body).includes('recentOrders'), false);
+  assert.equal(JSON.stringify(body).includes('adminPassword'), false);
+  assert.equal(JSON.stringify(body).includes('adminSessionSecret'), false);
+  assert.equal(JSON.stringify(body).includes('adminDataKey'), false);
 });
 
 test('后台概览只读取一轮订单索引和一轮订阅索引', async function () {

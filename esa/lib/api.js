@@ -213,11 +213,11 @@ async function handleTemporaryRuntimeCheck(request, store, rootConfig, requestId
     await store.getJson('v2_runtime_config');
     return true;
   });
-  const config = await runRuntimeCheckStage(
-    checks,
-    'paymentConfig',
-    () => resolvePaymentConfig(store, rootConfig)
-  ) || rootConfig;
+  let config = rootConfig;
+  await runRuntimeCheckStage(checks, 'paymentConfig', async () => {
+    config = await resolvePaymentConfig(store, rootConfig);
+    return true;
+  });
   await runRuntimeCheckStage(checks, 'plans', async () => {
     const result = await getPlanConfig(store);
     return Boolean(result?.plans?.monthly && result?.plans?.annual);
