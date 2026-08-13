@@ -6,7 +6,7 @@
 
 - 原生 HTML、CSS、JavaScript，无前端构建步骤。
 - ESA Functions 处理订单、支付宝接口、管理员账号密码认证和 Webhook。
-- ESA Edge KV 保存 v2_ 数据；联系人、备注和支付配置使用带完整性校验的加密信封。
+- ESA Edge KV 保存 v2_ 业务实体与 v3_ 聚合列表；联系人、备注和支付配置使用带完整性校验的加密信封。
 - 支付宝 AI 网页应用付款采用 fetch + node:crypto 实现 RSA2 协议，不把完整 Node SDK 作为线上依赖。
 - 月付和年付均为一次付款购买一个自然月或一个自然年，不自动续费。
 
@@ -50,7 +50,7 @@ ESA 控制台负责入口、静态资源目录和环境变量配置；该项目�
 
 在 ESA 控制台进入“边缘计算与 AI > KV 存储”，创建命名空间，例如 neye-orders，并让 ESA_KV_NAMESPACE 与其完全一致。
 
-Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文档保证最长 300 秒。因此后台会显示“数据同步中”，列表索引采用月份和哈希分片，所有新数据使用 v2_ 前缀。旧沙箱订单不会迁移或删除，也不会进入新后台。
+Edge KV 是最终一致存储，数据通常数秒内同步到全球节点，文档保证最长 300 秒。因此后台会显示“数据同步中”。为适配 ESA 单次函数请求的 KV 调用限制，订单、审计和 Webhook 列表按月写入 `v3_bucket_` 聚合桶，订阅列表使用单独聚合桶；业务实体继续使用 `v2_` 前缀。旧沙箱订单不会迁移或删除，也不会进入新后台。
 
 参考：[ESA Edge KV 快速入门](https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/get-started-with-edge-kv)
 

@@ -391,25 +391,27 @@ test('后台概览只读取一轮订单索引和一轮订阅索引', async funct
   class DashboardReadTrackingStore extends MemoryStore {
     constructor() {
       super();
-      this.indexReadCount = 0;
+      this.bucketReads = [];
     }
 
-    async readIndex(keys) {
-      this.indexReadCount += 1;
-      return super.readIndex(keys);
+    async getJson(key) {
+      if (key.startsWith('v3_bucket_')) this.bucketReads.push(key);
+      return super.getJson(key);
     }
   }
   const store = new DashboardReadTrackingStore();
   const config = testConfig();
   const session = await loginAdmin(store, config, '198.51.100.31');
-  store.indexReadCount = 0;
+  store.bucketReads = [];
   const response = await routeRequest(adminRequest('/api/admin/dashboard', session), {
     store: store,
     config: config,
     requestId: 'REQ_DASHBOARD_READ_COUNT',
   });
   assert.equal(response.status, 200);
-  assert.equal(store.indexReadCount, 2);
+  assert.ok(store.bucketReads.includes('v3_bucket_subscribers'));
+  assert.ok(store.bucketReads.some((key) => key.startsWith('v3_bucket_orders_')));
+  assert.equal(store.bucketReads.some((key) => key.startsWith('v2_idx_')), false);
 });
 
 test('管理会话使用 ESA Web API 编码和字符串 HMAC 签名', function () {
@@ -559,7 +561,7 @@ test('正确凭据通过后，限流清理或登录审计失败不会阻断会�
       if (key.startsWith('v2_rate_login_') && value?.count === 0) {
         throw new Error('simulated rate cleanup failure');
       }
-      if (key.startsWith('v2_audit_')) {
+      if (key.startsWith('v3_bucket_audit_')) {
         throw new Error('simulated audit failure');
       }
       return super.putJson(key, value);

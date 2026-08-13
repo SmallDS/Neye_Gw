@@ -3,12 +3,10 @@ import {
   AppError,
   decryptJson,
   encryptJson,
-  INDEX_SHARDS,
   monthKey,
   monthsForRange,
   parseCursor,
   randomId,
-  shardFor,
   sha256,
   clampPageSize,
 } from './core.js';
@@ -17,8 +15,31 @@ function eventKey(id) {
   return 'v2_webhook_' + id;
 }
 
-function eventIndexKey(month, shard) {
-  return 'v2_idx_webhooks_' + month + '_' + shard.toString(16);
+function eventBucketKey(month) {
+  return 'v3_bucket_webhooks_' + month;
+}
+
+async function upsertEventBucket(store, record, maxItems = 5000) {
+  const key = eventBucketKey(monthKey(record.createdAt));
+  const current = await store.getJson(key);
+  const records = Array.isArray(current) ? current : [];
+  const next = [record, ...records.filter((item) => item?.id !== record.id)].slice(0, maxItems);
+  await store.putJson(key, next);
+}
+
+async function readEventBuckets(store, keys) {
+  const buckets = await store.getMany(keys);
+  const records = [];
+  const seen = new Set();
+  for (const bucket of buckets) {
+    if (!Array.isArray(bucket)) continue;
+    for (const record of bucket) {
+      if (!record || typeof record.id !== 'string' || seen.has(record.id)) continue;
+      seen.add(record.id);
+      records.push(record);
+    }
+  }
+  return records;
 }
 
 function eventIdFor(type, order, extra) {
@@ -81,6 +102,7 @@ async function sendRecord(store, config, record) {
     clearTimeout(timeout);
   }
   await store.putJson(eventKey(record.id), record);
+  await upsertEventBucket(store, record);
   return record;
 }
 
@@ -88,7 +110,10 @@ export async function emitSubscriptionEvent(store, config, input) {
   if (!config.webhookUrl || !config.webhookSecret) return { enabled: false };
   const id = eventIdFor(input.type, input.order, input.extra);
   const existing = await store.getJson(eventKey(id));
-  if (existing) return { enabled: true, event: publicEvent(existing), duplicate: true };
+  if (existing) {
+    await upsertEventBucket(store, existing);
+    return { enabled: true, event: publicEvent(existing), duplicate: true };
+  }
 
   const privateData = decryptJson(
     input.subscriber.privateCipher,
@@ -129,7 +154,7 @@ export async function emitSubscriptionEvent(store, config, input) {
     payloadCipher: encryptJson(payload, config.adminDataKey, 'webhook:' + id),
   };
   await store.putJson(eventKey(id), record);
-  await store.appendIndex(eventIndexKey(monthKey(createdAt), shardFor(id)), id);
+  await upsertEventBucket(store, record);
   const delivered = await sendRecord(store, config, record);
   return { enabled: true, event: publicEvent(delivered), duplicate: false };
 }
@@ -148,11 +173,8 @@ export async function retryWebhook(store, config, id) {
 }
 
 export async function listWebhooks(store, options) {
-  const keys = monthsForRange(options.from, options.to).flatMap((month) => (
-    Array.from({ length: INDEX_SHARDS }, (_, shard) => eventIndexKey(month, shard))
-  ));
-  const ids = await store.readIndex(keys);
-  const records = (await store.getMany(ids.map(eventKey))).filter(Boolean)
+  const keys = monthsForRange(options.from, options.to).map(eventBucketKey);
+  const records = (await readEventBuckets(store, keys)).filter(Boolean)
     .filter((record) => {
       const created = Date.parse(record.createdAt);
       if (created < options.from.getTime() || created >= options.to.getTime()) return false;

@@ -169,7 +169,11 @@ function dateRange(url, defaultDays = 30) {
 async function auditAction(store, requestId, entry, action) {
   try {
     const result = await action();
-    await recordAudit(store, Object.assign({}, entry, { result: 'succeeded', requestId }));
+    try {
+      await recordAudit(store, Object.assign({}, entry, { result: 'succeeded', requestId }));
+    } catch {
+      console.log('neye_admin_audit_write_failed', requestId, entry.action || 'unknown');
+    }
     return result;
   } catch (error) {
     try {

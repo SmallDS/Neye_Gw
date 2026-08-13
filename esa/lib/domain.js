@@ -6,7 +6,6 @@ import {
   dateKey,
   decryptJson,
   encryptJson,
-  INDEX_SHARDS,
   maskContact,
   monthKey,
   monthsForRange,
@@ -15,7 +14,6 @@ import {
   randomId,
   sanitizeText,
   safeMeta,
-  shardFor,
   subscriberIdFor,
   SUCCESS_TRADE_STATUSES,
 } from './core.js';
@@ -29,20 +27,49 @@ function subscriberKey(id) {
   return 'v2_subscriber_' + id;
 }
 
-function auditKey(id) {
-  return 'v2_audit_' + id;
+function orderBucketKey(month) {
+  return 'v3_bucket_orders_' + month;
 }
 
-function orderIndexKey(month, shard) {
-  return 'v2_idx_orders_' + month + '_' + shard.toString(16);
+function subscriberBucketKey() {
+  return 'v3_bucket_subscribers';
 }
 
-function subscriberIndexKey(shard) {
-  return 'v2_idx_subscribers_' + shard.toString(16);
+function auditBucketKey(month) {
+  return 'v3_bucket_audit_' + month;
 }
 
-function auditIndexKey(month, shard) {
-  return 'v2_idx_audit_' + month + '_' + shard.toString(16);
+async function upsertBucketRecord(store, key, record, maxItems = 5000) {
+  const current = await store.getJson(key);
+  const records = Array.isArray(current) ? current : [];
+  const next = [record, ...records.filter((item) => item?.id !== record.id)].slice(0, maxItems);
+  await store.putJson(key, next);
+}
+
+async function readBucketRecords(store, keys) {
+  const buckets = await store.getMany(keys);
+  const records = [];
+  const seen = new Set();
+  for (const bucket of buckets) {
+    if (!Array.isArray(bucket)) continue;
+    for (const record of bucket) {
+      if (!record || typeof record.id !== 'string' || seen.has(record.id)) continue;
+      seen.add(record.id);
+      records.push(record);
+    }
+  }
+  return records;
+}
+
+async function saveSubscriber(store, subscriber) {
+  await store.putJson(subscriberKey(subscriber.id), subscriber);
+  await upsertBucketRecord(store, subscriberBucketKey(), subscriber);
+}
+
+async function orderRecordsForRange(store, from, to) {
+  const keys = monthsForRange(from, to).map(orderBucketKey);
+  return (await readBucketRecords(store, keys))
+    .filter((order) => Date.parse(order.createdAt) >= from.getTime() && Date.parse(order.createdAt) < to.getTime());
 }
 
 function newOrderId() {
@@ -99,7 +126,7 @@ export async function createOrder(store, config, input) {
     refunds: [],
   };
   await store.putJson(orderKey(id), order);
-  await store.appendIndex(orderIndexKey(monthKey(createdAt), shardFor(id)), id);
+  await upsertBucketRecord(store, orderBucketKey(monthKey(createdAt)), order);
   return order;
 }
 
@@ -119,6 +146,7 @@ export async function requireOrder(store, id) {
 export async function saveOrder(store, order) {
   order.updatedAt = new Date().toISOString();
   await store.putJson(orderKey(order.id), order);
+  await upsertBucketRecord(store, orderBucketKey(monthKey(order.createdAt)), order);
 }
 
 export function publicOrder(order, subscription = null) {
@@ -278,10 +306,7 @@ export async function markOrderPaid(store, config, order, trade, source) {
   }
 
   recomputeSubscriber(subscriber);
-  await store.putJson(subscriberKey(subscriber.id), subscriber);
-  if (!existingSubscriber) {
-    await store.appendIndex(subscriberIndexKey(shardFor(subscriber.id)), subscriber.id);
-  }
+  await saveSubscriber(store, subscriber);
 
   order.paymentStatus = order.paymentStatus === 'refunded'
     ? 'refunded'
@@ -387,7 +412,7 @@ async function finalizeRefund(store, config, order, refund) {
       }
       if (changed) {
         recomputeSubscriber(subscriber);
-        await store.putJson(subscriberKey(subscriber.id), subscriber);
+        await saveSubscriber(store, subscriber);
         revokedSubscriber = subscriber;
       }
     }
@@ -463,39 +488,25 @@ export async function adjustSubscriberExpiry(store, config, subscriber, input) {
   subscriber.adjustments = Array.isArray(subscriber.adjustments) ? subscriber.adjustments : [];
   subscriber.adjustments.push(adjustment);
   recomputeSubscriber(subscriber);
-  await store.putJson(subscriberKey(subscriber.id), subscriber);
+  await saveSubscriber(store, subscriber);
   return { subscriber, adjustment, eventType: 'subscription.adjusted' };
 }
 
 export async function listOrders(store, config, options) {
-  let ids = [];
+  let records = [];
   if (options.orderId) {
-    ids = [options.orderId];
+    records = [await store.getJson(orderKey(options.orderId))];
   } else if (options.tradeNo) {
     const mapping = await store.getJson('v2_trade_' + options.tradeNo);
-    ids = mapping?.orderId ? [mapping.orderId] : [];
-  } else if (options.contact) {
-    const normalized = normalizeContact(options.contact);
-    const subscriberId = subscriberIdFor(config, normalized);
-    const subscriber = await store.getJson(subscriberKey(subscriberId));
-    ids = (subscriber?.grants || []).map((grant) => grant.orderId);
-    const rangeKeys = monthsForRange(options.from, options.to).flatMap((month) => (
-      Array.from({ length: INDEX_SHARDS }, (_, shard) => orderIndexKey(month, shard))
-    ));
-    const pendingIds = await store.readIndex(rangeKeys);
-    const pendingOrders = await store.getMany(pendingIds.map(orderKey));
-    for (const order of pendingOrders) {
-      if (order?.subscriberId === subscriberId) ids.push(order.id);
-    }
-    ids = [...new Set(ids)];
+    records = mapping?.orderId ? [await store.getJson(orderKey(mapping.orderId))] : [];
   } else {
-    const keys = monthsForRange(options.from, options.to).flatMap((month) => (
-      Array.from({ length: INDEX_SHARDS }, (_, shard) => orderIndexKey(month, shard))
-    ));
-    ids = await store.readIndex(keys);
+    records = await orderRecordsForRange(store, options.from, options.to);
   }
 
-  const records = await store.getMany(ids.map(orderKey));
+  if (options.contact) {
+    const subscriberId = subscriberIdFor(config, normalizeContact(options.contact));
+    records = records.filter((order) => order?.subscriberId === subscriberId);
+  }
   const filtered = records.filter((order) => {
     if (!order) return false;
     const created = Date.parse(order.createdAt);
@@ -515,20 +526,14 @@ export async function listOrders(store, config, options) {
   };
 }
 
-async function allSubscriberIds(store) {
-  const keys = Array.from({ length: INDEX_SHARDS }, (_, shard) => subscriberIndexKey(shard));
-  return store.readIndex(keys);
-}
-
 export async function listSubscribers(store, config, options = {}) {
-  let ids;
+  let records;
   if (options.contact) {
     const normalized = normalizeContact(options.contact);
-    ids = [subscriberIdFor(config, normalized)];
+    records = [await store.getJson(subscriberKey(subscriberIdFor(config, normalized)))];
   } else {
-    ids = await allSubscriberIds(store);
+    records = await readBucketRecords(store, [subscriberBucketKey()]);
   }
-  const records = await store.getMany(ids.map(subscriberKey));
   const views = records.filter(Boolean).map((record) => adminSubscriber(record, config))
     .filter((subscriber) => !options.status || subscriber.status === options.status)
     .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
@@ -555,17 +560,13 @@ export async function recordAudit(store, entry) {
     requestId: sanitizeText(entry.requestId, 40),
     meta: safeMeta(entry.meta, entry.allowedMeta || []),
   };
-  await store.putJson(auditKey(id), record);
-  await store.appendIndex(auditIndexKey(monthKey(createdAt), shardFor(id)), id);
+  await upsertBucketRecord(store, auditBucketKey(monthKey(createdAt)), record);
   return record;
 }
 
 export async function listAudit(store, options) {
-  const keys = monthsForRange(options.from, options.to).flatMap((month) => (
-    Array.from({ length: INDEX_SHARDS }, (_, shard) => auditIndexKey(month, shard))
-  ));
-  const ids = await store.readIndex(keys);
-  const records = (await store.getMany(ids.map(auditKey))).filter(Boolean)
+  const keys = monthsForRange(options.from, options.to).map(auditBucketKey);
+  const records = (await readBucketRecords(store, keys)).filter(Boolean)
     .filter((record) => {
       const created = Date.parse(record.createdAt);
       if (created < options.from.getTime() || created >= options.to.getTime()) return false;
@@ -583,15 +584,9 @@ export async function listAudit(store, options) {
 }
 
 export async function dashboardStats(store, config, from, to) {
-  const keys = monthsForRange(from, to).flatMap((month) => (
-    Array.from({ length: INDEX_SHARDS }, (_, shard) => orderIndexKey(month, shard))
-  ));
-  const allIds = await store.readIndex(keys);
-  const allOrders = (await store.getMany(allIds.map(orderKey))).filter(Boolean)
-    .filter((order) => Date.parse(order.createdAt) >= from.getTime() && Date.parse(order.createdAt) < to.getTime())
+  const allOrders = (await orderRecordsForRange(store, from, to)).filter(Boolean)
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-  const subscriberIds = await allSubscriberIds(store);
-  const subscribers = (await store.getMany(subscriberIds.map(subscriberKey))).filter(Boolean);
+  const subscribers = (await readBucketRecords(store, [subscriberBucketKey()])).filter(Boolean);
   const active = subscribers.filter((item) => subscriberStatus(item.expiresAt) === 'active').length;
   const expiring = subscribers.filter((item) => subscriberStatus(item.expiresAt) === 'expiring').length;
   const paid = allOrders.filter((order) => ['paid', 'partially_refunded', 'refunded'].includes(order.paymentStatus));
