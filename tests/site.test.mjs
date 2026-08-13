@@ -338,6 +338,13 @@ test('后台认证状态接口返回部署版本且不泄露安全配置', async
     mode: 'password',
     configured: true,
     loginAvailable: true,
+    configurationSource: 'environment',
+    checks: {
+      username: true,
+      password: true,
+      dataKey: true,
+      sessionSecret: true,
+    },
   });
   assert.equal(JSON.stringify(body).includes('password-for-tests-2026'), false);
 
@@ -350,6 +357,13 @@ test('后台认证状态接口返回部署版本且不泄露安全配置', async
     mode: 'password',
     configured: false,
     loginAvailable: false,
+    configurationSource: 'environment',
+    checks: {
+      username: true,
+      password: false,
+      dataKey: true,
+      sessionSecret: true,
+    },
   });
 });
 test('支付宝请求签名包含 sign_type，响应验签覆盖原始 JSON', function () {
@@ -437,6 +451,36 @@ test('账号密码登录、CSRF、错误凭据和修改密码后的旧会话失�
     }),
     function (error) { return error.code === 'ADMIN_AUTH_REQUIRED'; }
   );
+});
+
+test('正确凭据通过后，限流清理或登录审计失败不会阻断会话签发', async function () {
+  class LoginPostProcessingFailureStore extends MemoryStore {
+    async putJson(key, value) {
+      if (key.startsWith('v2_rate_login_') && value?.count === 0) {
+        throw new Error('simulated rate cleanup failure');
+      }
+      if (key.startsWith('v2_audit_')) {
+        throw new Error('simulated audit failure');
+      }
+      return super.putJson(key, value);
+    }
+  }
+
+  const store = new LoginPostProcessingFailureStore();
+  const config = testConfig();
+  const response = await routeRequest(request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'x-forwarded-for': '198.51.100.26' },
+    json: {
+      username: config.adminUsername,
+      password: config.adminPassword,
+    },
+  }), { store, config, requestId: 'REQ_LOGIN_POST_PROCESSING_FAILURE' });
+  const body = await payload(response);
+
+  assert.equal(response.status, 200);
+  assert.ok(body.session.csrfToken);
+  assert.match(response.headers.get('set-cookie') || '', /__Host-neye_admin_session=/);
 });
 
 test('支付配置经管理员密码确认后加密保存，密钥不回显且环境变量仍可作为兜底', async function () {

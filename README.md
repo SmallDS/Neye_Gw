@@ -74,7 +74,7 @@ ESA Pages 控制台中的“构建信息 > 环境变量”主要提供给构建�
 
 上面四个值只在 ESA KV 控制台填写，不要发送给我，不要写入 Git、HTML、浏览器脚本、构建日志或普通运行日志。`ADMIN_USERNAME` 支持 3 至 64 位字母、数字、点、下划线和短横线；`ADMIN_PASSWORD` 至少 12 位，建议使用 20 位以上随机密码。`ADMIN_DATA_KEY` 部署后不要更换，否则已有加密数据无法读取，订阅用户标识也会变化。截图中已有的 `ESA_KV_NAMESPACE=neye-orders` 可以保留；如果请求函数读不到它，代码默认也会使用 `neye-orders`。
 
-KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/`。调用 `/api/admin/auth/state` 时，预期返回 `mode: "password"`、`configured: true` 和 `loginAvailable: true`。Edge KV 是最终一致存储，通常数秒内同步，官方文档说明最长可能需要 300 秒；函数内部还会缓存运行时配置 30 秒。
+KV 配置写入后等待边缘同步，再打开 `https://www.smallds.icu/admin/`。调用 `/api/admin/auth/state` 时，预期返回 `mode: "password"`、`configured: true` 和 `loginAvailable: true`。`configurationSource` 只显示配置来自环境变量、Edge KV 或 Edge KV 缓存，`checks` 只显示四项配置是否有效，均不返回原值。Edge KV 是最终一致存储，通常数秒内同步，官方文档说明最长可能需要 300 秒；函数内部还会缓存运行时配置 30 秒。
 
 支付宝收款参数在 `/admin/` 的“支付配置”中维护：
 

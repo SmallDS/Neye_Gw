@@ -406,16 +406,27 @@ async function handleAdminRoute(request, store, rootConfig, requestId) {
   if (path === '/api/admin/auth/login') {
     assertMethod(request, 'POST');
     const session = await login(store, rootConfig, request, await parseJsonBody(request));
-    await recordAudit(store, {
-      action: 'admin.login',
-      targetType: 'admin',
-      targetId: 'primary',
-      result: 'succeeded',
-      requestId,
-    });
-    return jsonSuccess(request, rootConfig, requestId, {
-      session: { expiresAt: session.session.expiresAt * 1000, csrfToken: session.csrfToken },
-    }, 200, { 'Set-Cookie': session.cookies });
+    try {
+      await recordAudit(store, {
+        action: 'admin.login',
+        targetType: 'admin',
+        targetId: 'primary',
+        result: 'succeeded',
+        requestId,
+      });
+    } catch {
+      // 登录审计不可用时保留服务端错误日志，但不阻断已通过校验的管理员。
+      console.log('neye_admin_login_audit_failed', requestId);
+    }
+    try {
+      return jsonSuccess(request, rootConfig, requestId, {
+        session: { expiresAt: session.session.expiresAt * 1000, csrfToken: session.csrfToken },
+      }, 200, { 'Set-Cookie': session.cookies });
+    } catch {
+      throw new AppError(503, 'ADMIN_LOGIN_STAGE_FAILED', '管理员登录服务暂时不可用。', {
+        stage: 'response_create',
+      });
+    }
   }
   if (path === '/api/admin/session') {
     assertMethod(request, 'GET');

@@ -29,6 +29,17 @@ function credentialsConfigured(config) {
     && Boolean(config.adminDataKey && config.adminSessionSecret);
 }
 
+function configurationChecks(config) {
+  const username = String(config.adminUsername || '').trim();
+  const password = String(config.adminPassword || '');
+  return {
+    username: /^[A-Za-z0-9._-]{3,64}$/.test(username),
+    password: password.length >= 12 && password.length <= 256,
+    dataKey: Boolean(config.adminDataKey),
+    sessionSecret: Boolean(config.adminSessionSecret),
+  };
+}
+
 function credentialVersion(config) {
   return hmacHex(
     config.adminSessionSecret,
@@ -105,6 +116,8 @@ export async function getAuthState(_store, config) {
     mode: 'password',
     configured,
     loginAvailable: configured,
+    configurationSource: config.runtimeConfigSource || 'environment',
+    checks: configurationChecks(config),
   };
 }
 
@@ -124,8 +137,20 @@ export async function login(store, config, request, input) {
   if (!inputShapeValid || !usernameMatches || !passwordMatches) {
     throw new AppError(401, 'ADMIN_CREDENTIALS_INVALID', '账号或密码不正确。');
   }
-  if (rate) await store.delete(rate);
-  return issueSession(config);
+  if (rate) {
+    try {
+      await store.putJson(rate, { windowStartedAt: Date.now(), count: 0, lockedUntil: 0 });
+    } catch {
+      // 正确凭据已经通过校验，限流计数清理失败不应阻断登录。
+    }
+  }
+  try {
+    return issueSession(config);
+  } catch {
+    throw new AppError(503, 'ADMIN_LOGIN_STAGE_FAILED', '管理员登录服务暂时不可用。', {
+      stage: 'session_issue',
+    });
+  }
 }
 
 export async function verifySensitivePassword(store, config, request, password) {
@@ -139,7 +164,13 @@ export async function verifySensitivePassword(store, config, request, password) 
   if (providedPassword.length > 256 || !constantTimeTextEqual(providedPassword, config.adminPassword)) {
     throw new AppError(401, 'ADMIN_PASSWORD_INVALID', '管理员密码不正确。');
   }
-  if (rate) await store.delete(rate);
+  if (rate) {
+    try {
+      await store.putJson(rate, { windowStartedAt: Date.now(), count: 0, lockedUntil: 0 });
+    } catch {
+      // 正确密码已经通过校验，限流计数清理失败不应阻断敏感操作。
+    }
+  }
   return true;
 }
 
