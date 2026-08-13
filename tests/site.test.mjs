@@ -336,7 +336,7 @@ test('ESA Edge KV 索引读取限制并发并保持去重顺序', async function
     async get(key) {
       activeReads += 1;
       maximumActiveReads = Math.max(maximumActiveReads, activeReads);
-      if (activeReads > 4) throw new Error('too_many_concurrent_reads');
+      if (activeReads > 1) throw new Error('too_many_concurrent_reads');
       await new Promise(function (resolve) { setTimeout(resolve, 2); });
       activeReads -= 1;
       const suffix = Number.parseInt(String(key).split('_').pop(), 10);
@@ -349,7 +349,7 @@ test('ESA Edge KV 索引读取限制并发并保持去重顺序', async function
     const ids = await store.readIndex(Array.from({ length: 32 }, function (_, index) {
       return 'v2_order_idx_202608_' + index;
     }));
-    assert.ok(maximumActiveReads <= 4);
+    assert.equal(maximumActiveReads, 1);
     assert.equal(ids[0], 'ORDER_SHARED');
     assert.equal(ids.filter(function (id) { return id === 'ORDER_SHARED'; }).length, 1);
     assert.equal(ids.length, 33);
@@ -357,6 +357,31 @@ test('ESA Edge KV 索引读取限制并发并保持去重顺序', async function
     if (previous === undefined) delete globalThis.EdgeKV;
     else globalThis.EdgeKV = previous;
   }
+});
+
+test('临时运行时深度检查覆盖后台读取链路且不返回业务数据', async function () {
+  const store = new MemoryStore();
+  const response = await routeRequest(request('/api/system/runtime-check-20260813'), {
+    store: store,
+    config: testConfig(),
+    requestId: 'REQ_RUNTIME_CHECK',
+  });
+  const body = await payload(response);
+  assert.equal(response.status, 200);
+  assert.equal(body.ready, true);
+  assert.deepEqual(Object.keys(body.checks).sort(), [
+    'audit',
+    'authSession',
+    'dashboard',
+    'kvRead',
+    'orders',
+    'paymentConfig',
+    'plans',
+    'subscribers',
+    'webhooks',
+  ]);
+  assert.equal(JSON.stringify(body).includes('contact'), false);
+  assert.equal(JSON.stringify(body).includes('recentOrders'), false);
 });
 
 test('后台概览只读取一轮订单索引和一轮订阅索引', async function () {

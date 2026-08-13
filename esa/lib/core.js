@@ -12,12 +12,12 @@ export const DEFAULT_BASE_URL = 'https://www.smallds.icu';
 export const SANDBOX_GATEWAY = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do';
 export const PRODUCTION_GATEWAY = 'https://openapi.alipay.com/gateway.do';
 export const SUCCESS_TRADE_STATUSES = Object.freeze(['TRADE_SUCCESS', 'TRADE_FINISHED']);
-export const RUNTIME_VERSION = '2026-08-13.8';
+export const RUNTIME_VERSION = '2026-08-13.9';
 export const INDEX_SHARDS = 16;
 export const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 export const MAX_RANGE_DAYS = 93;
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
-const KV_READ_CONCURRENCY = 4;
+const KV_READ_CONCURRENCY = 1;
 
 export class AppError extends Error {
   constructor(status, code, message, details = undefined) {
@@ -765,13 +765,23 @@ export class KvStore {
   }
 
   async getText(key) {
-    const value = await withKvRetry(() => this.client.get(key, { type: 'text' }));
+    let value;
+    try {
+      value = await withKvRetry(() => this.client.get(key, { type: 'text' }));
+    } catch {
+      throw new AppError(503, 'KV_READ_FAILED', '边缘存储读取暂时不可用。', { operation: 'read' });
+    }
     if (value === undefined || value === null || value === '') return null;
     return typeof value === 'string' ? value : JSON.stringify(value);
   }
 
   async getJson(key) {
-    const value = await withKvRetry(() => this.client.get(key, { type: 'text' }));
+    let value;
+    try {
+      value = await withKvRetry(() => this.client.get(key, { type: 'text' }));
+    } catch {
+      throw new AppError(503, 'KV_READ_FAILED', '边缘存储读取暂时不可用。', { operation: 'read' });
+    }
     if (value === undefined || value === null || value === '') return null;
     if (typeof value === 'object') return value;
     try {
@@ -782,15 +792,28 @@ export class KvStore {
   }
 
   async putJson(key, value) {
-    await withKvRetry(() => this.client.put(key, JSON.stringify(value)));
+    try {
+      await withKvRetry(() => this.client.put(key, JSON.stringify(value)));
+    } catch {
+      throw new AppError(503, 'KV_WRITE_FAILED', '边缘存储写入暂时不可用。', { operation: 'write' });
+    }
   }
 
   async putText(key, value) {
-    await withKvRetry(() => this.client.put(key, String(value)));
+    try {
+      await withKvRetry(() => this.client.put(key, String(value)));
+    } catch {
+      throw new AppError(503, 'KV_WRITE_FAILED', '边缘存储写入暂时不可用。', { operation: 'write' });
+    }
   }
 
   async delete(key) {
-    if (typeof this.client.delete === 'function') await withKvRetry(() => this.client.delete(key));
+    if (typeof this.client.delete !== 'function') return;
+    try {
+      await withKvRetry(() => this.client.delete(key));
+    } catch {
+      throw new AppError(503, 'KV_DELETE_FAILED', '边缘存储删除暂时不可用。', { operation: 'delete' });
+    }
   }
 
   async appendIndex(key, id, maxItems = 5000) {

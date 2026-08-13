@@ -18,6 +18,7 @@ import {
   SUCCESS_TRADE_STATUSES,
 } from './core.js';
 import {
+  checkAuthRuntime,
   clearSessionCookies,
   getAuthState,
   login,
@@ -75,6 +76,7 @@ import {
 } from './payment-config.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const TEMPORARY_RUNTIME_CHECK_PATH = '/api/system/runtime-check-20260813';
 
 function responseHeaders(request, config, requestId, contentType, extra = {}) {
   const headers = new Headers({
@@ -187,6 +189,63 @@ async function maybeEmitWebhook(store, config, outcome, extra = {}) {
     subscriber: outcome.subscriber,
     extra,
   });
+}
+
+async function runRuntimeCheckStage(checks, name, action) {
+  try {
+    const value = await action();
+    checks[name] = { ok: true, value: value === undefined ? null : value };
+    return value;
+  } catch (error) {
+    checks[name] = {
+      ok: false,
+      code: isAppError(error) ? error.code : 'UNSTRUCTURED_RUNTIME_ERROR',
+    };
+    return null;
+  }
+}
+
+async function handleTemporaryRuntimeCheck(request, store, rootConfig, requestId) {
+  assertMethod(request, 'GET');
+  const checks = {};
+  await runRuntimeCheckStage(checks, 'authSession', async () => checkAuthRuntime(rootConfig));
+  await runRuntimeCheckStage(checks, 'kvRead', async () => {
+    await store.getJson('v2_runtime_config');
+    return true;
+  });
+  const config = await runRuntimeCheckStage(
+    checks,
+    'paymentConfig',
+    () => resolvePaymentConfig(store, rootConfig)
+  ) || rootConfig;
+  await runRuntimeCheckStage(checks, 'plans', async () => {
+    const result = await getPlanConfig(store);
+    return Boolean(result?.plans?.monthly && result?.plans?.annual);
+  });
+  const url = new URL(request.url);
+  const range = dateRange(url, 30);
+  await runRuntimeCheckStage(checks, 'dashboard', async () => {
+    const result = await dashboardStats(store, config, range.from, range.to);
+    return Boolean(result?.metrics && Array.isArray(result?.recentOrders));
+  });
+  await runRuntimeCheckStage(checks, 'orders', async () => {
+    const result = await listOrders(store, config, { from: range.from, to: range.to, limit: 1, cursor: 0 });
+    return Number.isInteger(result?.total);
+  });
+  await runRuntimeCheckStage(checks, 'subscribers', async () => {
+    const result = await listSubscribers(store, config, { limit: 1, cursor: 0 });
+    return Number.isInteger(result?.total);
+  });
+  await runRuntimeCheckStage(checks, 'audit', async () => {
+    const result = await listAudit(store, { from: range.from, to: range.to, limit: 1, cursor: 0 });
+    return Number.isInteger(result?.total);
+  });
+  await runRuntimeCheckStage(checks, 'webhooks', async () => {
+    const result = await listWebhooks(store, { from: range.from, to: range.to, limit: 1, cursor: 0 });
+    return Number.isInteger(result?.total);
+  });
+  const ready = Object.values(checks).every((check) => check.ok === true && check.value !== false);
+  return jsonSuccess(request, rootConfig, requestId, { ready, checks }, ready ? 200 : 503);
 }
 
 async function handlePublicPlans(request, store) {
@@ -834,6 +893,9 @@ export async function routeRequest(request, supplied = {}) {
   }
 
   const store = supplied.store || new KvStore(rootConfig);
+  if (url.pathname === TEMPORARY_RUNTIME_CHECK_PATH) {
+    return handleTemporaryRuntimeCheck(request, store, rootConfig, requestId);
+  }
   if (url.pathname === '/api/subscription/plans') {
     return jsonSuccess(request, rootConfig, requestId, await handlePublicPlans(request, store));
   }
