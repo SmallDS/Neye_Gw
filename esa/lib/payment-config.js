@@ -1,11 +1,8 @@
-import { createPrivateKey, createPublicKey } from 'node:crypto';
 import {
-  alipayPublicKeyPem,
   AppError,
   decryptJson,
   encryptJson,
   maskIdentifier,
-  privateKeyPem,
   PRODUCTION_GATEWAY,
   SANDBOX_GATEWAY,
   sha256,
@@ -43,23 +40,142 @@ function rawBase64Key(value, maxLength, label) {
   return text;
 }
 
+function decodeBase64Der(value) {
+  const unpadded = String(value || '').replace(/=+$/g, '');
+  const padded = unpadded + '='.repeat((4 - (unpadded.length % 4)) % 4);
+  const binary = atob(padded);
+  if (btoa(binary).replace(/=+$/g, '') !== unpadded) throw new Error('invalid_base64');
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function readDerElement(bytes, offset) {
+  if (!Number.isInteger(offset) || offset < 0 || offset >= bytes.length) throw new Error('invalid_der_offset');
+  const tag = bytes[offset];
+  let cursor = offset + 1;
+  if (cursor >= bytes.length) throw new Error('invalid_der_length');
+  const firstLength = bytes[cursor];
+  cursor += 1;
+  let length = firstLength;
+  if ((firstLength & 0x80) !== 0) {
+    const lengthBytes = firstLength & 0x7f;
+    if (lengthBytes === 0 || lengthBytes > 4 || cursor + lengthBytes > bytes.length || bytes[cursor] === 0) {
+      throw new Error('invalid_der_length');
+    }
+    length = 0;
+    for (let index = 0; index < lengthBytes; index += 1) length = (length * 256) + bytes[cursor + index];
+    if (length < 128) throw new Error('non_canonical_der_length');
+    cursor += lengthBytes;
+  }
+  const end = cursor + length;
+  if (end > bytes.length) throw new Error('truncated_der');
+  return { tag, start: cursor, end, next: end };
+}
+
+function derChildren(bytes, sequence) {
+  if (sequence.tag !== 0x30) throw new Error('expected_der_sequence');
+  const children = [];
+  let cursor = sequence.start;
+  while (cursor < sequence.end) {
+    const child = readDerElement(bytes, cursor);
+    if (child.end > sequence.end) throw new Error('child_outside_sequence');
+    children.push(child);
+    cursor = child.next;
+  }
+  if (cursor !== sequence.end) throw new Error('invalid_sequence_length');
+  return children;
+}
+
+function positiveIntegerInfo(bytes, element) {
+  if (element.tag !== 0x02 || element.start >= element.end) throw new Error('expected_positive_integer');
+  const first = bytes[element.start];
+  if ((first & 0x80) !== 0) throw new Error('negative_integer');
+  if (element.end - element.start > 1 && first === 0 && (bytes[element.start + 1] & 0x80) === 0) {
+    throw new Error('non_canonical_integer');
+  }
+  let cursor = element.start;
+  while (cursor < element.end && bytes[cursor] === 0) cursor += 1;
+  if (cursor === element.end) throw new Error('zero_integer');
+  const significantLength = element.end - cursor;
+  let leadingZeroBits = 0;
+  for (let mask = 0x80; mask > 0 && (bytes[cursor] & mask) === 0; mask >>= 1) leadingZeroBits += 1;
+  let numericValue = null;
+  if (significantLength <= 6) {
+    numericValue = 0;
+    for (let index = cursor; index < element.end; index += 1) numericValue = (numericValue * 256) + bytes[index];
+  }
+  return {
+    bitLength: (significantLength * 8) - leadingZeroBits,
+    numericValue,
+  };
+}
+
+function assertRsaParameters(bytes, modulusElement, exponentElement) {
+  const modulus = positiveIntegerInfo(bytes, modulusElement);
+  const exponent = positiveIntegerInfo(bytes, exponentElement);
+  if (modulus.bitLength < 2048 || modulus.bitLength > 16384) throw new Error('unsupported_modulus_length');
+  if (exponent.numericValue === null || exponent.numericValue < 3 || exponent.numericValue % 2 === 0) {
+    throw new Error('invalid_public_exponent');
+  }
+}
+
+// ESA's Node crypto shim does not reliably expose createPrivateKey/createPublicKey, so validate the standard DER envelopes directly.
+function assertPkcs1PrivateKey(value) {
+  const bytes = decodeBase64Der(value);
+  const root = readDerElement(bytes, 0);
+  if (root.tag !== 0x30 || root.next !== bytes.length) throw new Error('invalid_private_key_envelope');
+  const parts = derChildren(bytes, root);
+  if (parts.length !== 9) throw new Error('invalid_private_key_fields');
+  if (parts[0].tag !== 0x02 || parts[0].end - parts[0].start !== 1 || bytes[parts[0].start] !== 0) {
+    throw new Error('unsupported_private_key_version');
+  }
+  assertRsaParameters(bytes, parts[1], parts[2]);
+  for (let index = 3; index < parts.length; index += 1) positiveIntegerInfo(bytes, parts[index]);
+}
+
+function assertSpkiPublicKey(value) {
+  const bytes = decodeBase64Der(value);
+  const root = readDerElement(bytes, 0);
+  if (root.tag !== 0x30 || root.next !== bytes.length) throw new Error('invalid_public_key_envelope');
+  const rootParts = derChildren(bytes, root);
+  if (rootParts.length !== 2) throw new Error('invalid_spki_fields');
+  const algorithmParts = derChildren(bytes, rootParts[0]);
+  const rsaOid = [0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01];
+  if (algorithmParts.length !== 2
+    || algorithmParts[0].tag !== 0x06
+    || algorithmParts[0].end - algorithmParts[0].start !== rsaOid.length
+    || algorithmParts[1].tag !== 0x05
+    || algorithmParts[1].start !== algorithmParts[1].end) {
+    throw new Error('unsupported_public_key_algorithm');
+  }
+  for (let index = 0; index < rsaOid.length; index += 1) {
+    if (bytes[algorithmParts[0].start + index] !== rsaOid[index]) throw new Error('unsupported_public_key_oid');
+  }
+  const bitString = rootParts[1];
+  if (bitString.tag !== 0x03 || bitString.end - bitString.start < 2 || bytes[bitString.start] !== 0) {
+    throw new Error('invalid_public_key_bit_string');
+  }
+  const rsaSequence = readDerElement(bytes, bitString.start + 1);
+  if (rsaSequence.tag !== 0x30 || rsaSequence.next !== bitString.end) throw new Error('invalid_rsa_public_key');
+  const rsaParts = derChildren(bytes, rsaSequence);
+  if (rsaParts.length !== 2) throw new Error('invalid_rsa_public_key_fields');
+  assertRsaParameters(bytes, rsaParts[0], rsaParts[1]);
+}
+
 function assertRsaPrivateKey(value) {
   try {
-    const key = createPrivateKey(privateKeyPem({ privatePkcsKey: value }));
-    const bits = Number(key.asymmetricKeyDetails?.modulusLength || 0);
-    if (key.asymmetricKeyType !== 'rsa' || (bits && bits < 2048)) throw new Error('invalid_rsa_key');
+    assertPkcs1PrivateKey(value);
   } catch {
-    throw new AppError(400, 'PAYMENT_PRIVATE_KEY_INVALID', '应用私钥不是有效的 RSA PKCS#1 私钥。');
+    throw new AppError(400, 'PAYMENT_PRIVATE_KEY_INVALID', '应用私钥不是有效的 2048 位或更高强度 RSA PKCS#1 私钥。');
   }
 }
 
 function assertRsaPublicKey(value) {
   try {
-    const key = createPublicKey(alipayPublicKeyPem({ alipayPublicKey: value }));
-    const bits = Number(key.asymmetricKeyDetails?.modulusLength || 0);
-    if (key.asymmetricKeyType !== 'rsa' || (bits && bits < 2048)) throw new Error('invalid_rsa_key');
+    assertSpkiPublicKey(value);
   } catch {
-    throw new AppError(400, 'PAYMENT_PUBLIC_KEY_INVALID', '支付宝公钥不是有效的 RSA 公钥。');
+    throw new AppError(400, 'PAYMENT_PUBLIC_KEY_INVALID', '支付宝公钥不是有效的 2048 位或更高强度 RSA 公钥。');
   }
 }
 

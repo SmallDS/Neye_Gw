@@ -611,6 +611,46 @@ test('支付配置经管理员密码确认后加密保存，密钥不回显且�
     function (error) { return error.code === 'PAYMENT_KEY_FORMAT_INVALID'; }
   );
 
+  const pkcs8PrivateKey = pemBody(applicationKeys.privateKey);
+  await assert.rejects(
+    routeRequest(adminRequest('/api/admin/payment-config', session, {
+      method: 'PUT',
+      json: Object.assign({}, baseInput, { privatePkcsKey: pkcs8PrivateKey }),
+    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_PKCS8_REJECTED' }),
+    function (error) { return error.code === 'PAYMENT_PRIVATE_KEY_INVALID'; }
+  );
+
+  await assert.rejects(
+    routeRequest(adminRequest('/api/admin/payment-config', session, {
+      method: 'PUT',
+      json: Object.assign({}, baseInput, { privatePkcsKey: privatePkcsKey.slice(0, -8) }),
+    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_TRUNCATED_REJECTED' }),
+    function (error) { return error.code === 'PAYMENT_PRIVATE_KEY_INVALID'; }
+  );
+
+  const weakKeys = generateKeyPairSync('rsa', {
+    modulusLength: 1024,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+  });
+  await assert.rejects(
+    routeRequest(adminRequest('/api/admin/payment-config', session, {
+      method: 'PUT',
+      json: Object.assign({}, baseInput, { privatePkcsKey: pemBody(weakKeys.privateKey) }),
+    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_WEAK_PRIVATE_REJECTED' }),
+    function (error) { return error.code === 'PAYMENT_PRIVATE_KEY_INVALID'; }
+  );
+
+  await assert.rejects(
+    routeRequest(adminRequest('/api/admin/payment-config', session, {
+      method: 'PUT',
+      json: Object.assign({}, baseInput, {
+        privatePkcsKey,
+        alipayPublicKey: pemBody(weakKeys.publicKey),
+      }),
+    }), { store, config: rootConfig, requestId: 'REQ_CONFIG_WEAK_PUBLIC_REJECTED' }),
+    function (error) { return error.code === 'PAYMENT_PUBLIC_KEY_INVALID'; }
+  );
   const saved = await routeRequest(adminRequest('/api/admin/payment-config', session, {
     method: 'PUT',
     json: Object.assign({}, baseInput, { privatePkcsKey }),
