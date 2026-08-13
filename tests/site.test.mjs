@@ -8,6 +8,7 @@ import {
   decryptJson,
   decryptJsonAsync,
   decryptJsonPortable,
+  decodeSignedPayload,
   encryptJsonAsync,
   encryptJsonPortable,
   loadRuntimeConfig,
@@ -324,6 +325,20 @@ test('ESA Edge KV 可为请求函数提供后台安全配置', async function ()
     if (previous === undefined) delete globalThis.EdgeKV;
     else globalThis.EdgeKV = previous;
   }
+});
+
+test('管理会话使用 ESA Web API 编码和字符串 HMAC 签名', function () {
+  const secret = 'session-signing-test-secret-2026';
+  const value = {
+    username: 'admin',
+    note: '中文会话',
+    expiresAt: 1786593600,
+  };
+  const token = encodeSignedPayload(value, secret);
+  assert.match(token, /^[A-Za-z0-9_-]+\.[a-f0-9]{64}$/);
+  assert.deepEqual(decodeSignedPayload(token, secret), value);
+  assert.equal(decodeSignedPayload(token, 'wrong-session-secret-2026'), null);
+  assert.equal(decodeSignedPayload(token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a'), secret), null);
 });
 test('后台认证状态接口返回部署版本且不泄露安全配置', async function () {
   const response = await routeRequest(request('/api/admin/auth/state'), {

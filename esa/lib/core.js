@@ -12,7 +12,7 @@ export const DEFAULT_BASE_URL = 'https://www.smallds.icu';
 export const SANDBOX_GATEWAY = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do';
 export const PRODUCTION_GATEWAY = 'https://openapi.alipay.com/gateway.do';
 export const SUCCESS_TRADE_STATUSES = Object.freeze(['TRADE_SUCCESS', 'TRADE_FINISHED']);
-export const RUNTIME_VERSION = '2026-08-13.6';
+export const RUNTIME_VERSION = '2026-08-13.7';
 export const INDEX_SHARDS = 16;
 export const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 export const MAX_RANGE_DAYS = 93;
@@ -512,17 +512,26 @@ export async function decryptJsonAsync(payload, secret, context) {
   return decryptJson(payload, secret, context);
 }
 export function encodeSignedPayload(value, secret) {
-  const encoded = toBase64Url(Buffer.from(JSON.stringify(value), 'utf8'));
-  return encoded + '.' + toBase64Url(createHmac('sha256', deriveKey(secret, 'session')).update(encoded).digest());
+  if (!secret) throw new AppError(503, 'SESSION_SECRET_MISSING', '会话签名密钥尚未配置。');
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  return encoded + '.' + hmacHex(secret, 'session:' + encoded);
 }
 
 export function decodeSignedPayload(value, secret) {
   try {
     const [encoded, signature, extra] = String(value || '').split('.');
     if (!encoded || !signature || extra) return null;
-    const expected = toBase64Url(createHmac('sha256', deriveKey(secret, 'session')).update(encoded).digest());
+    if (!/^[A-Fa-f0-9]{64}$/.test(signature)) return null;
+    const expected = hmacHex(secret, 'session:' + encoded);
     if (!constantTimeTextEqual(signature, expected)) return null;
-    return JSON.parse(fromBase64Url(encoded).toString('utf8'));
+    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }

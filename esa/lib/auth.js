@@ -51,6 +51,16 @@ function rateKey(action, fingerprint) {
   return 'v2_rate_' + action.replace(/[^a-z0-9_]/gi, '') + '_' + fingerprint;
 }
 
+function runSessionStage(stage, action) {
+  try {
+    return action();
+  } catch {
+    throw new AppError(503, 'ADMIN_LOGIN_STAGE_FAILED', '管理员登录服务暂时不可用。', {
+      stage,
+    });
+  }
+}
+
 async function consumeRate(store, config, request, action, options) {
   if (!AUTH_RATE_LIMIT_ENABLED) return null;
   const now = Date.now();
@@ -79,16 +89,24 @@ async function consumeRate(store, config, request, action, options) {
 
 function issueSession(config) {
   const now = Math.floor(Date.now() / 1000);
-  const csrfToken = randomBytes(24).toString('hex');
+  const csrfToken = runSessionStage('csrf_random', function () {
+    return randomBytes(24).toString('hex');
+  });
   const session = {
-    version: credentialVersion(config),
+    version: runSessionStage('credential_version', function () {
+      return credentialVersion(config);
+    }),
     username: normalizeUsername(config.adminUsername),
     issuedAt: now,
     expiresAt: now + ADMIN_SESSION_SECONDS,
     csrf: csrfToken,
-    nonce: randomId('', 10),
+    nonce: runSessionStage('nonce_random', function () {
+      return randomId('', 10);
+    }),
   };
-  const encoded = encodeSignedPayload(session, config.adminSessionSecret);
+  const encoded = runSessionStage('token_encode', function () {
+    return encodeSignedPayload(session, config.adminSessionSecret);
+  });
   return {
     csrfToken,
     session,
@@ -144,13 +162,7 @@ export async function login(store, config, request, input) {
       // 正确凭据已经通过校验，限流计数清理失败不应阻断登录。
     }
   }
-  try {
-    return issueSession(config);
-  } catch {
-    throw new AppError(503, 'ADMIN_LOGIN_STAGE_FAILED', '管理员登录服务暂时不可用。', {
-      stage: 'session_issue',
-    });
-  }
+  return issueSession(config);
 }
 
 export async function verifySensitivePassword(store, config, request, password) {
