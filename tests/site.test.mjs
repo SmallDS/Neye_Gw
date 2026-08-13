@@ -16,6 +16,7 @@ import {
   encodeSignedPayload,
   encryptJson,
   fenToAmount,
+  KvStore,
   normalizeContact,
   rsaSign,
   rsaVerify,
@@ -325,6 +326,62 @@ test('ESA Edge KV 可为请求函数提供后台安全配置', async function ()
     if (previous === undefined) delete globalThis.EdgeKV;
     else globalThis.EdgeKV = previous;
   }
+});
+
+test('ESA Edge KV 索引读取限制并发并保持去重顺序', async function () {
+  const previous = globalThis.EdgeKV;
+  let activeReads = 0;
+  let maximumActiveReads = 0;
+  class ConcurrencyGuardEdgeKV {
+    async get(key) {
+      activeReads += 1;
+      maximumActiveReads = Math.max(maximumActiveReads, activeReads);
+      if (activeReads > 4) throw new Error('too_many_concurrent_reads');
+      await new Promise(function (resolve) { setTimeout(resolve, 2); });
+      activeReads -= 1;
+      const suffix = Number.parseInt(String(key).split('_').pop(), 10);
+      return JSON.stringify(suffix % 2 === 0 ? ['ORDER_SHARED', 'ORDER_' + suffix] : ['ORDER_' + suffix]);
+    }
+  }
+  globalThis.EdgeKV = ConcurrencyGuardEdgeKV;
+  try {
+    const store = new KvStore({ kvNamespace: 'neye-orders' });
+    const ids = await store.readIndex(Array.from({ length: 32 }, function (_, index) {
+      return 'v2_order_idx_202608_' + index;
+    }));
+    assert.ok(maximumActiveReads <= 4);
+    assert.equal(ids[0], 'ORDER_SHARED');
+    assert.equal(ids.filter(function (id) { return id === 'ORDER_SHARED'; }).length, 1);
+    assert.equal(ids.length, 33);
+  } finally {
+    if (previous === undefined) delete globalThis.EdgeKV;
+    else globalThis.EdgeKV = previous;
+  }
+});
+
+test('后台概览只读取一轮订单索引和一轮订阅索引', async function () {
+  class DashboardReadTrackingStore extends MemoryStore {
+    constructor() {
+      super();
+      this.indexReadCount = 0;
+    }
+
+    async readIndex(keys) {
+      this.indexReadCount += 1;
+      return super.readIndex(keys);
+    }
+  }
+  const store = new DashboardReadTrackingStore();
+  const config = testConfig();
+  const session = await loginAdmin(store, config, '198.51.100.31');
+  store.indexReadCount = 0;
+  const response = await routeRequest(adminRequest('/api/admin/dashboard', session), {
+    store: store,
+    config: config,
+    requestId: 'REQ_DASHBOARD_READ_COUNT',
+  });
+  assert.equal(response.status, 200);
+  assert.equal(store.indexReadCount, 2);
 });
 
 test('管理会话使用 ESA Web API 编码和字符串 HMAC 签名', function () {

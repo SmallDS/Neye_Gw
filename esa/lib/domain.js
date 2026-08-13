@@ -583,13 +583,13 @@ export async function listAudit(store, options) {
 }
 
 export async function dashboardStats(store, config, from, to) {
-  const orderResult = await listOrders(store, config, { from, to, limit: 100, cursor: 0 });
   const keys = monthsForRange(from, to).flatMap((month) => (
     Array.from({ length: INDEX_SHARDS }, (_, shard) => orderIndexKey(month, shard))
   ));
   const allIds = await store.readIndex(keys);
   const allOrders = (await store.getMany(allIds.map(orderKey))).filter(Boolean)
-    .filter((order) => Date.parse(order.createdAt) >= from.getTime() && Date.parse(order.createdAt) < to.getTime());
+    .filter((order) => Date.parse(order.createdAt) >= from.getTime() && Date.parse(order.createdAt) < to.getTime())
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const subscriberIds = await allSubscriberIds(store);
   const subscribers = (await store.getMany(subscriberIds.map(subscriberKey))).filter(Boolean);
   const active = subscribers.filter((item) => subscriberStatus(item.expiresAt) === 'active').length;
@@ -608,6 +608,6 @@ export async function dashboardStats(store, config, from, to) {
       activeSubscriptions: active + expiring,
       expiringSubscriptions: expiring,
     },
-    recentOrders: orderResult.items.slice(0, 8),
+    recentOrders: allOrders.slice(0, 8).map((order) => adminOrder(order, config)),
   };
 }

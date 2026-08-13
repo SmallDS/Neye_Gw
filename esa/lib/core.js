@@ -12,11 +12,12 @@ export const DEFAULT_BASE_URL = 'https://www.smallds.icu';
 export const SANDBOX_GATEWAY = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do';
 export const PRODUCTION_GATEWAY = 'https://openapi.alipay.com/gateway.do';
 export const SUCCESS_TRADE_STATUSES = Object.freeze(['TRADE_SUCCESS', 'TRADE_FINISHED']);
-export const RUNTIME_VERSION = '2026-08-13.7';
+export const RUNTIME_VERSION = '2026-08-13.8';
 export const INDEX_SHARDS = 16;
 export const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 export const MAX_RANGE_DAYS = 93;
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
+const KV_READ_CONCURRENCY = 4;
 
 export class AppError extends Error {
   constructor(status, code, message, details = undefined) {
@@ -800,7 +801,7 @@ export class KvStore {
   }
 
   async readIndex(keys) {
-    const buckets = await Promise.all(keys.map((key) => this.getJson(key)));
+    const buckets = await this.getMany(keys);
     const ids = [];
     const seen = new Set();
     for (const bucket of buckets) {
@@ -815,10 +816,15 @@ export class KvStore {
     return ids;
   }
 
-  async getMany(keys, concurrency = 24) {
+  async getMany(keys, concurrency = KV_READ_CONCURRENCY) {
+    const requestedConcurrency = Number.parseInt(String(concurrency || ''), 10);
+    const batchSize = Math.max(
+      1,
+      Math.min(Number.isFinite(requestedConcurrency) ? requestedConcurrency : KV_READ_CONCURRENCY, KV_READ_CONCURRENCY)
+    );
     const results = [];
-    for (let offset = 0; offset < keys.length; offset += concurrency) {
-      const chunk = keys.slice(offset, offset + concurrency);
+    for (let offset = 0; offset < keys.length; offset += batchSize) {
+      const chunk = keys.slice(offset, offset + batchSize);
       const values = await Promise.all(chunk.map((key) => this.getJson(key)));
       results.push(...values);
     }
